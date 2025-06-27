@@ -269,8 +269,8 @@ class SteamEmailApp(tk.Tk):
     def _configure_email_window(self):
         logger.info("打开邮件服务配置窗口。")
         config_window = tk.Toplevel(self)
-        config_window.title("配置邮件服务 (SMTP & IMAP)")
-        config_window.geometry("500x550")
+        config_window.title("配置邮件服务 (SMTP)") # 标题已修改
+        config_window.geometry("500x350") # 窗口大小已调整，因为移除了IMAP Tab
         config_window.transient(self)
         config_window.grab_set()
 
@@ -308,35 +308,29 @@ class SteamEmailApp(tk.Tk):
         tk.Label(smtp_frame, text="端口465通常使用SSL，端口587通常使用STARTTLS。", fg="gray").grid(row=5, column=0, columnspan=2, sticky="w", padx=5, pady=2)
 
 
-        # --- IMAP 配置 Tab ---
-        imap_frame = ttk.Frame(notebook)
-        notebook.add(imap_frame, text="IMAP (接收邮件)")
-
-        current_imap_config = self.email_manager.email_config.get("imap", {})
-
-        tk.Label(imap_frame, text="IMAP 主机:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
-        imap_host_entry = tk.Entry(imap_frame, width=40)
-        imap_host_entry.grid(row=0, column=1, padx=5, pady=5)
-        imap_host_entry.insert(0, current_imap_config.get("host", "imap.qq.com"))
-
-        tk.Label(imap_frame, text="端口:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
-        imap_port_entry = tk.Entry(imap_frame, width=40)
-        imap_port_entry.grid(row=1, column=1, padx=5, pady=5)
-        imap_port_entry.insert(0, str(current_imap_config.get("port", 993)))
-
-        tk.Label(imap_frame, text="用户名 (邮箱地址):").grid(row=2, column=0, sticky="w", padx=5, pady=5)
-        imap_username_entry = tk.Entry(imap_frame, width=40)
-        imap_username_entry.grid(row=2, column=1, padx=5, pady=5)
-        imap_username_entry.insert(0, current_imap_config.get("username", ""))
-
-        tk.Label(imap_frame, text="授权码 (非邮箱密码):").grid(row=3, column=0, sticky="w", padx=5, pady=5)
-        imap_password_entry = tk.Entry(imap_frame, width=40, show="*")
-        imap_password_entry.grid(row=3, column=1, padx=5, pady=5)
-        imap_password_entry.insert(0, current_imap_config.get("password", ""))
-
-        imap_use_ssl_var = tk.BooleanVar(value=current_imap_config.get("use_ssl", True))
-        tk.Checkbutton(imap_frame, text="使用SSL加密 (推荐)", variable=imap_use_ssl_var).grid(row=4, column=0, columnspan=2, sticky="w", padx=5, pady=5)
-        tk.Label(imap_frame, text="端口993通常使用SSL。", fg="gray").grid(row=5, column=0, columnspan=2, sticky="w", padx=5, pady=2)
+        # --- IMAP 配置 Tab --- (此部分已被删除)
+        # current_imap_config = self.email_manager.email_config.get("imap", {})
+        # imap_frame = ttk.Frame(notebook)
+        # notebook.add(imap_frame, text="IMAP (接收邮件)")
+        # tk.Label(imap_frame, text="IMAP 主机:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        # imap_host_entry = tk.Entry(imap_frame, width=40)
+        # imap_host_entry.grid(row=0, column=1, padx=5, pady=5)
+        # imap_host_entry.insert(0, current_imap_config.get("host", "imap.qq.com"))
+        # tk.Label(imap_frame, text="端口:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
+        # imap_port_entry = tk.Entry(imap_frame, width=40)
+        # imap_port_entry.grid(row=1, column=1, padx=5, pady=5)
+        # imap_port_entry.insert(0, str(current_imap_config.get("port", 993)))
+        # tk.Label(imap_frame, text="用户名 (邮箱地址):").grid(row=2, column=0, sticky="w", padx=5, pady=5)
+        # imap_username_entry = tk.Entry(imap_frame, width=40)
+        # imap_username_entry.grid(row=2, column=1, padx=5, pady=5)
+        # imap_username_entry.insert(0, current_imap_config.get("username", ""))
+        # tk.Label(imap_frame, text="授权码 (非邮箱密码):").grid(row=3, column=0, sticky="w", padx=5, pady=5)
+        # imap_password_entry = tk.Entry(imap_frame, width=40, show="*")
+        # imap_password_entry.grid(row=3, column=1, padx=5, pady=5)
+        # imap_password_entry.insert(0, current_imap_config.get("password", ""))
+        # imap_use_ssl_var = tk.BooleanVar(value=current_imap_config.get("use_ssl", True))
+        # tk.Checkbutton(imap_frame, text="使用SSL加密 (推荐)", variable=imap_use_ssl_var).grid(row=4, column=0, columnspan=2, sticky="w", padx=5, pady=5)
+        # tk.Label(imap_frame, text="端口993通常使用SSL。", fg="gray").grid(row=5, column=0, columnspan=2, sticky="w", padx=5, pady=2)
 
 
         def save_email_config():
@@ -347,17 +341,18 @@ class SteamEmailApp(tk.Tk):
                 "password": smtp_password_entry.get().strip(),
                 "use_tls": smtp_use_tls_var.get()
             }
-            new_imap_config = {
-                "host": imap_host_entry.get().strip(),
-                "port": int(imap_port_entry.get().strip()),
-                "username": imap_username_entry.get().strip(),
-                "password": imap_password_entry.get().strip(),
-                "use_ssl": imap_use_ssl_var.get()
-            }
+            # IMAP 配置部分已被删除
+            # new_imap_config = {
+            #     "host": imap_host_entry.get().strip(),
+            #     "port": int(imap_port_entry.get().strip()),
+            #     "username": imap_username_entry.get().strip(),
+            #     "password": imap_password_entry.get().strip(),
+            #     "use_ssl": imap_use_ssl_var.get()
+            # }
             
             full_config = {
                 "smtp": new_smtp_config,
-                "imap": new_imap_config
+                # "imap": new_imap_config # IMAP 配置不再保存
             }
 
             if self.email_manager.save_email_config(full_config):
