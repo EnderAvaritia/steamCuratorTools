@@ -4,6 +4,10 @@ from tkinter import filedialog, messagebox, scrolledtext, ttk
 from steam_info_extractor import SteamInfoExtractor
 from email_manager import EmailManager
 import os
+import time
+import re  # 导入 re 模块
+from lxml import html  # 导入 lxml 模块
+import requests
 import pyperclip
 import threading
 import logging
@@ -426,10 +430,6 @@ class SteamEmailApp(tk.Tk):
 
             self.after(0, lambda: self.appid_label.config(text=common_appid))
 
-            if not self.email_manager.load_publisher_emails_from_csv(csv_path):
-                self.after(0, lambda: self._update_status("CSV加载失败：无法加载发行商邮箱CSV文件，请检查路径和格式。", "error"))
-                return
-
             game_info = self.extractor.get_game_info_from_appid(common_appid)
             if not game_info:
                 self.after(0, lambda: self._update_status("游戏信息获取失败：无法从Steam商店页面获取游戏名和发行商名，请检查AppID或网络连接。", "error"))
@@ -440,36 +440,59 @@ class SteamEmailApp(tk.Tk):
 
             self.after(0, lambda: self.game_name_label.config(text=game_name))
             
-            matched_publisher_name, publisher_email = self.email_manager.get_email_by_publisher_name(steam_publisher_name)
+            publisher_email = self.email_manager.get_email(game_name, steam_publisher_name, csv_path)
 
             display_publisher_name = steam_publisher_name
             
             if publisher_email:
                 self.after(0, lambda: self.publisher_email_label.config(text=publisher_email, fg="green"))
-                if matched_publisher_name: 
-                    display_publisher_name = matched_publisher_name 
-                    match_type = self.email_manager.last_match_type
-                    
-                    if match_type == "exact":
-                        self.after(0, lambda dpn=display_publisher_name: self.publisher_name_label.config(text=f"{dpn} (精确匹配)", fg="blue"))
-                        self.after(0, lambda dpn=display_publisher_name: self._update_status(f"已找到发行商 '{dpn}' 的邮箱 (精确匹配)。", "success"))
-                    elif match_type == "steam_contains_csv":
-                        self.after(0, lambda dpn=display_publisher_name: self.publisher_name_label.config(text=f"{dpn} (Steam名包含CSV名)", fg="blue"))
-                        self.after(0, lambda dpn=display_publisher_name: self._update_status(f"已找到发行商 '{dpn}' 的邮箱 (Steam名包含CSV名)。", "success"))
-                    elif match_type == "csv_contains_steam":
-                        self.after(0, lambda dpn=display_publisher_name: self.publisher_name_label.config(text=f"{dpn} (CSV名包含Steam名)", fg="blue"))
-                        self.after(0, lambda dpn=display_publisher_name: self._update_status(f"已找到发行商 '{dpn}' 的邮箱 (CSV名包含Steam名)。", "success"))
-                    else:
-                        self.after(0, lambda dpn=display_publisher_name: self.publisher_name_label.config(text=display_publisher_name, fg="blue"))
-                        self.after(0, lambda dpn=display_publisher_name: self._update_status(f"已找到发行商 '{dpn}' 的邮箱。", "success"))
-                else: 
-                    self.after(0, lambda dpn=display_publisher_name: self.publisher_name_label.config(text=f"{dpn} (邮箱已找到，但名称未匹配)", fg="blue"))
-                    self.after(0, lambda: self._update_status(f"已找到邮箱，但发行商名称匹配逻辑异常。", "warning"))
+                self.after(0, lambda dpn=display_publisher_name: self.publisher_name_label.config(text=display_publisher_name, fg="blue"))
+                self.after(0, lambda dpn=display_publisher_name: self._update_status(f"已找到发行商 '{dpn}' 的邮箱。", "success"))
             else:
                 self.after(0, lambda: self.publisher_email_label.config(text="未找到该发行商的邮箱", fg="red"))
                 self.after(0, lambda sp_name=steam_publisher_name: self._update_status(f"未在CSV中找到发行商 '{sp_name}' 的邮箱地址。", "warning"))
                 self.after(0, lambda dpn=display_publisher_name: self.publisher_name_label.config(text=f"{dpn} (未匹配到邮箱)", fg="red"))
-                publisher_email = "未找到邮箱" 
+                publisher_email = "未找到邮箱"
+
+                # 如果找不到邮箱，则发送请求到 Steam 帮助页面
+                help_url = f"https://help.steampowered.com/zh-cn/wizard/HelpWithGameTechnicalIssue?appid={common_appid}"
+                try:
+                    response = requests.get(help_url)
+                    response.raise_for_status()
+
+                    # 使用 lxml 解析 HTML
+                    tree = html.fromstring(response.text)
+
+                    # 使用 XPath 提取包含邮箱地址的文本
+                    email_text = tree.xpath('string(//div[@class="help_official_support_row"]/text())')
+
+                    # 使用正则表达式提取邮箱地址
+                    match = re.search(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", email_text)
+
+                    if match:
+                        extracted_email = match.group(0)
+                        self.after(0, lambda email=extracted_email: self.publisher_email_label.config(text=email, fg="purple"))  # 使用紫色显示提取的邮箱
+                        self.after(0, lambda email=extracted_email: self._update_status(f"未找到邮箱，但从 Steam 帮助页面提取到邮箱地址: {email}", "success"))
+                        logger.info(f"从 Steam 帮助页面提取到邮箱地址: {extracted_email}")
+                        publisher_email = extracted_email  # 更新 publisher_email 变量
+                    else:
+                        self.after(0, lambda: self._update_status("未找到邮箱，且无法从 Steam 帮助页面提取邮箱地址。", "warning"))
+                        logger.warning("未找到邮箱，且无法从 Steam 帮助页面提取邮箱地址。")
+
+                except requests.exceptions.HTTPError as e:
+                    if e.response.status_code == 429:
+                        self.after(0, lambda: self._update_status(f"未找到邮箱，向 Steam 帮助页面发送请求时遇到速率限制 (AppID: {common_appid})。请稍后重试。", "warning"))
+                        logger.warning(f"向 Steam 帮助页面发送请求时遇到速率限制 (AppID: {common_appid})。状态码: {e.response.status_code}")
+                        time.sleep(60)
+                    else:
+                        self.after(0, lambda: self._update_status(f"未找到邮箱，但向 Steam 帮助页面发送请求失败 (AppID: {common_appid})，HTTP 错误: {e}", "error"))
+                        logger.error(f"向 Steam 帮助页面发送请求失败 (AppID: {common_appid})，HTTP 错误: {e}")
+                except requests.exceptions.RequestException as e:
+                    self.after(0, lambda: self._update_status(f"未找到邮箱，且向 Steam 帮助页面发送请求时发生错误 (AppID: {common_appid}): {e}", "error"))
+                    logger.exception(f"向 Steam 帮助页面发送请求时发生错误 (AppID: {common_appid}): {e}")
+                except Exception as e:
+                    self.after(0, lambda e=e: self._update_status(f"处理 Steam 帮助页面响应时发生错误: {e}", "error"))
+                
 
             steam_urls_for_template = "\n".join(urls)
 
@@ -497,7 +520,7 @@ class SteamEmailApp(tk.Tk):
         finally:
             self.after(0, lambda: self._set_buttons_state("normal"))
             logger.info("URL处理线程结束。")
-
+            
     def _start_send_email_thread(self):
         """在单独的线程中启动邮件发送逻辑，避免GUI卡死。"""
         self._set_buttons_state("disabled")
