@@ -1,9 +1,10 @@
 # steamCuratorTools
 
 把一个 Steam 鉴赏家组的「组评」全量拉到本地，或按 appid 逐条删除，支持断点续传、
-失败重试、代理轮换，并导出为 JSON / CSV / SQLite。
+失败重试、代理轮换，并导出为 JSON / CSV / SQLite；另附发行商合作邮件助手（GUI）。
 
-项目源自两个已经跑通的单文件脚本（导出器 + 删除器），合并为一个可安装、可测试的 Python 包。
+项目源自两个已经跑通的单文件脚本（导出器 + 删除器），合并为一个可安装、可测试的 Python 包；
+发行商邮件助手（原 `emailHelper`）也已并入同一包，GUI 依赖按需安装。
 
 ## 特性
 
@@ -18,6 +19,8 @@
 - **可离线检查**：`--status` 只读输出目录，`--dry-run` 只打印解析后的配置，都不联网。
 - **删除组评**：`--delete` 交互式逐行输入 appid，`--delete-file` 批量删除；成功记录写入
   `deleted.log`，重跑自动跳过，`--check` 可先只读校验登录态。
+- **发行商邮件助手（GUI）**：`--email-helper` 启动图形界面，按 Steam URL 获取游戏/发行商，
+  匹配或提取邮箱，套用模板生成邮件并通过 SMTP 发送。
 
 ## 安装
 
@@ -28,8 +31,11 @@ python -m venv .venv
 # Windows: .venv\Scripts\activate
 # macOS/Linux: source .venv/bin/activate
 
-pip install -e ".[dev]"
+pip install -e ".[dev,gui]"
 ```
+
+`gui` 额外依赖只用于邮件助手的剪贴板粘贴；Linux 还需要系统包 `python3-tk`。
+不需要 GUI 时可以只装 `pip install -e ".[dev]"`。
 
 安装后可直接使用 `steamCuratorTools` 命令，也可以：
 
@@ -226,6 +232,60 @@ sessionid 解析顺序：
 | `--check` | 只读校验登录态并打印后台组评数量（必须配合 `--har`） |
 | `--force` | 忽略删除日志中的成功记录，强制重发 |
 | `--log-level LEVEL` | `DEBUG` / `INFO` / `WARNING` / `ERROR` / `CRITICAL`，默认 `INFO` |
+| `--email-helper` | 启动发行商邮件助手 GUI（忽略其他参数） |
+
+## 发行商邮件助手（GUI）
+
+邮件助手已并入本包：核心逻辑在 `steamCuratorTools.emailHelper`，Tkinter GUI 是可选入口。
+
+```bash
+pip install -e ".[gui]"              # 首次安装 GUI 依赖
+steamCuratorTools --email-helper     # 从主命令启动
+steamCuratorToolsEmail               # 等价独立入口
+python -m steamCuratorTools.emailHelper
+```
+
+使用流程：
+
+1. 点击「配置邮件服务」：填写 SMTP 主机、端口、发件邮箱和授权码；需要访问 Steam 时在「代理」
+   页启用代理（支持 http/https/socks5）。QQ 邮箱等通常使用授权码而非登录密码。
+2. 粘贴一个或多个 Steam 商店页 / 评测页 URL。所有 URL 必须指向同一个 AppID。
+3. 点击「处理 URL 并生成邮件」：程序自动获取游戏名与发行商，按 CSV → Steam 帮助页的顺序
+   查找邮箱，匹配成功后自动写回 CSV。
+4. 主题、收件人、正文都可以在界面上直接编辑；点「发送邮件」时使用界面上的最终内容。
+
+支持的占位符：`{publisher_name}`、`{game_name}`、`{appid}`、`{steam_url}`。
+未知占位符和普通花括号不会被替换，也不会报错。
+
+SMTP 加密方式：
+
+| 模式 | 常用端口 | 说明 |
+| --- | --- | --- |
+| `ssl` | 465 | 直接 TLS，推荐 |
+| `starttls` | 587 | 先明文连接再升级 TLS |
+| `none` | 25 | 不加密，仅限可信网络 |
+
+旧版配置中的 `use_tls` 会在读取时自动迁移为上述模式，无需手改。
+`email_config.example.json` 和 `publishers.example.csv` 展示了文件格式。
+
+本地数据文件（均已被 `.gitignore` 忽略）：
+
+```text
+email_config.json    # SMTP 与代理配置（含授权码，勿提交）
+publishers.csv       # 发行商邮箱表；缺失时自动创建表头
+email_templates/     # subject.txt / from.txt / body.txt
+app.log              # 运行日志
+```
+
+`publishers.csv` 的 `Publisher` 列支持用逗号写多个别名，例如：
+
+```csv
+Publisher,Email
+"Studio A, Studio B",press@example.org
+```
+
+匹配规则为：先精确匹配（忽略大小写），再选最长子串匹配；空发行商名不会匹配任何行。
+代理仅用于访问 Steam 商店/帮助页面，SMTP 发送始终直连。
 
 ## 输出文件
 
@@ -363,7 +423,9 @@ Cookie 和 HAR 等同于登录凭据：
 - HAR 只需保留到操作完成；删除功能不会把 Cookie 写入日志，但 HAR 本身仍含完整登录态。
 - 本仓库的 `.gitignore` 已忽略这些常见文件，但请自行确认。
 - 本项目的日志只打印 Cookie 长度和 sessionid 是否存在，不打印其内容；代理凭据会打码。
-- 如果怀疑泄露，请在 Steam 中退出所有设备并重新登录，使旧 Cookie 失效。
+- `email_config.json` 保存 SMTP 邮箱与授权码，`publishers.csv` 含个人联系人信息，两者均已被
+  `.gitignore` 忽略；不要提交或分享。可参考 `email_config.example.json` 重新填写。
+- 如果怀疑泄露，请在 Steam 中退出所有设备并重新登录，使旧 Cookie 失效；同时重置邮箱授权码。
 
 ## 开发
 
