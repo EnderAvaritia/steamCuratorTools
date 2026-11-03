@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Project outputs / local data
+curator_reviews/
+*.har
+cookie.txt
+cookies.txt
+proxies.txt
+config.toml
+*.sqlite3
+*.db
+
+# Sanitized test fixtures must be committed
+!tests/fixtures/*.har
+
+# OS / editors
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
