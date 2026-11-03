@@ -56,7 +56,8 @@ def buildParser() -> argparse.ArgumentParser:
             "  steamCuratorTools --status --out curator_reviews\n"
             "  steamCuratorTools --har capture.har --delete\n"
             "  steamCuratorTools --har capture.har --delete-file appids.txt\n"
-            "  steamCuratorTools --har capture.har --check"
+            "  steamCuratorTools --har capture.har --check\n"
+            "  steamCuratorTools --email-helper"
         ),
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -115,6 +116,8 @@ def buildParser() -> argparse.ArgumentParser:
                         help="忽略删除日志中已成功的 appid，强制重发")
     parser.add_argument("--log-level", dest="logLevel", metavar="LEVEL", default=None,
                         help="日志级别：DEBUG/INFO/WARNING/ERROR/CRITICAL（默认 INFO）")
+    parser.add_argument("--email-helper", dest="emailHelper", action="store_true",
+                        help="启动发行商邮件助手 GUI（忽略其他参数）")
     return parser
 
 
@@ -392,6 +395,10 @@ def _run(args: argparse.Namespace) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    if args.emailHelper:
+        from .emailHelper.gui import main as emailHelperMain
+
+        return emailHelperMain()
     try:
         return _run(args)
     except AuthError as exc:

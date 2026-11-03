@@ -26,6 +26,12 @@ config.toml
 *.sqlite3
 *.db
 
+# Email helper local data (SMTP credentials and personal contacts)
+/email_config.json
+/publishers.csv
+/email_templates/
+/app.log
+
 # Sanitized test fixtures must be committed
 !tests/fixtures/*.har
 deleted.log

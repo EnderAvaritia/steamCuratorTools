@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "steamCuratorTools"
-version = "0.3.0"
-description = "Export and delete Steam curator reviews with resume and proxy support"
+version = "0.4.0"
+description = "Export/delete Steam curator reviews and generate publisher outreach emails"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -25,6 +25,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+gui = [
+  "pyperclip>=1.8.2",
+]
 dev = [
   "pytest>=8",
   "ruff>=0.5",
@@ -32,6 +35,7 @@ dev = [
 
 [project.scripts]
 steamCuratorTools = "steamCuratorTools.cli:main"
+steamCuratorToolsEmail = "steamCuratorTools.emailHelper.gui:main"
 
 
 [tool.setuptools]

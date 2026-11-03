@@ -15,6 +15,15 @@ explicitAdminUrl = (
 )
 
 
+def testEmailHelperFlagLaunchesGui(monkeypatch: pytest.MonkeyPatch) -> None:
+    import steamCuratorTools.emailHelper.gui as emailGui
+
+    calls: list[bool] = []
+    monkeypatch.setattr(emailGui, "main", lambda: calls.append(True) or 0)
+    assert cli.main(["--email-helper"]) == 0
+    assert calls == [True]
+
+
 def testCliAdminDryRunWithSyntheticHar(tmp_path: Path, capsys) -> None:
     out = tmp_path / "dry"
     code = cli.main(["--har", str(adminHar), "--out", str(out), "--dry-run"])

@@ -1,0 +1,13 @@
+{
+    "smtp": {
+        "host": "smtp.qq.com",
+        "port": 465,
+        "username": "you@example.com",
+        "password": "your-smtp-authorization-code",
+        "encryption": "ssl"
+    },
+    "proxy": {
+        "enabled": false,
+        "url": ""
+    }
+}
