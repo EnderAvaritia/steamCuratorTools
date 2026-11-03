@@ -6,7 +6,7 @@ from .config import Config
 from .errors import AuthError, ConfigError, SteamError, UsageError
 from .models import Review, entry_key, local_iso, steamid64
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "__version__",

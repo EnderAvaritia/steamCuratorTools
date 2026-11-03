@@ -8,6 +8,7 @@ from urllib.parse import quote, urlsplit, urlunsplit
 BASE_URL = "https://store.steampowered.com"
 
 ADMIN_AJAX_SUFFIX = "/admin/ajaxgetrecommendations/"
+ADMIN_DELETE_SUFFIX = "/admin/ajaxdeletereview/"
 ADMIN_REFERER_SUFFIX = "/admin/reviews_manage"
 PUBLIC_AJAX_SUFFIX = "/ajaxgetfilteredrecommendations/"
 
@@ -18,6 +19,8 @@ SOURCE_SUFFIXES = {
     SOURCE_ADMIN: ADMIN_AJAX_SUFFIX,
     SOURCE_PUBLIC: PUBLIC_AJAX_SUFFIX,
 }
+
+KNOWN_SUFFIXES = (ADMIN_AJAX_SUFFIX, ADMIN_DELETE_SUFFIX, PUBLIC_AJAX_SUFFIX)
 
 
 def encode_curator_name(name: str) -> str:
@@ -59,19 +62,59 @@ def build_url_candidates(
     return unique
 
 
+def _strip_suffix(url: str, suffix: str) -> str | None:
+    """Return the URL prefix before a known endpoint suffix.
+
+    The trailing slash is optional so HAR exports and hand-written URLs both work.
+    """
+    for candidate in (suffix, suffix.rstrip("/")):
+        if candidate and url.endswith(candidate):
+            return url[: -len(candidate)]
+    return None
+
+
+def swap_endpoint(url: str, target_suffix: str) -> str | None:
+    """Rewrite a known curator endpoint suffix, preserving the rest of the URL."""
+    parts = urlsplit(url)
+    for suffix in KNOWN_SUFFIXES:
+        prefix = _strip_suffix(parts.path, suffix)
+        if prefix is not None:
+            path = prefix + target_suffix
+            return urlunsplit((parts.scheme, parts.netloc, path, parts.query, parts.fragment))
+    return None
+
+
+def build_delete_url(clan_id: str | None, url: str | None = None) -> str | None:
+    """Build the admin delete endpoint from a HAR/API URL or a clan id."""
+    if url:
+        swapped = swap_endpoint(url, ADMIN_DELETE_SUFFIX)
+        if swapped:
+            return swapped
+    if clan_id:
+        return f"{BASE_URL}/curator/{clan_id}{ADMIN_DELETE_SUFFIX}"
+    return None
+
+
+def build_recommendations_url(clan_id: str | None, url: str | None = None) -> str | None:
+    """Build the admin recommendations endpoint from a HAR/API URL or a clan id."""
+    if url:
+        swapped = swap_endpoint(url, ADMIN_AJAX_SUFFIX)
+        if swapped:
+            return swapped
+    if clan_id:
+        return f"{BASE_URL}/curator/{clan_id}{ADMIN_AJAX_SUFFIX}"
+    return None
+
+
 def build_referer(url: str, clan_id: str | None, source: str = SOURCE_ADMIN) -> str:
     """Build a plausible browser Referer header for a request URL."""
     suffix = SOURCE_SUFFIXES.get(source, ADMIN_AJAX_SUFFIX)
-    if url.endswith(suffix):
-        curator_url = url[: -len(suffix)]
-        if source == SOURCE_PUBLIC:
-            return curator_url
-        return curator_url + ADMIN_REFERER_SUFFIX
-    if url.endswith(suffix.rstrip("/")):
-        curator_url = url[: -len(suffix.rstrip("/"))]
-        if source == SOURCE_PUBLIC:
-            return curator_url
-        return curator_url + ADMIN_REFERER_SUFFIX
+    for candidate in (suffix, ADMIN_DELETE_SUFFIX):
+        curator_url = _strip_suffix(url, candidate)
+        if curator_url is not None:
+            if source == SOURCE_PUBLIC and candidate == suffix:
+                return curator_url
+            return curator_url + ADMIN_REFERER_SUFFIX
     if clan_id:
         base = f"{BASE_URL}/curator/{clan_id}"
         return base if source == SOURCE_PUBLIC else base + ADMIN_REFERER_SUFFIX

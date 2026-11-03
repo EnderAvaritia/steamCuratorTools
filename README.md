@@ -1,9 +1,9 @@
 # steam-curator-exporter
 
-把某个 Steam 鉴赏家组的「组评」全量拉取到本地，支持断点续传、失败重试、代理轮换，并导出为
-JSON / CSV / SQLite。
+把一个 Steam 鉴赏家组的「组评」全量拉到本地，或按 appid 逐条删除，支持断点续传、
+失败重试、代理轮换，并导出为 JSON / CSV / SQLite。
 
-项目源自一个已经跑通的单文件脚本，行为保持一致，但拆成了可安装、可测试的 Python 包。
+项目源自两个已经跑通的单文件脚本（导出器 + 删除器），合并为一个可安装、可测试的 Python 包。
 
 ## 特性
 
@@ -16,6 +16,8 @@ JSON / CSV / SQLite。
 - **代理池**：支持 http / https / socks4 / socks5 / socks5h，按请求和重试轮换，日志自动隐藏账号密码。
 - **多种导出**：JSON、CSV（Excel 友好的 UTF-8 BOM）、SQLite（主键 upsert）。
 - **可离线检查**：`--status` 只读输出目录，`--dry-run` 只打印解析后的配置，都不联网。
+- **删除组评**：`--delete` 交互式逐行输入 appid，`--delete-file` 批量删除；成功记录写入
+  `deleted.log`，重跑自动跳过，`--check` 可先只读校验登录态。
 
 ## 安装
 
@@ -83,6 +85,65 @@ steam-curator-exporter --source public --clan-id 26214428 --name "电竞狂热�
 
 公开模式只解析页面上的 `a[data-ds-appid]`，没有评测者、时间、点赞数等字段；
 分页在遇到空页时结束，服务端总数未知。
+
+## 删除组评
+
+删除功能复用同一套登录态与代理配置，但**必须用 `--har` 指定 HAR 文件**，避免误用来源不明的凭据。
+HAR 里可以只包含 `admin/ajaxdeletereview/` 请求（在管理页删除一条评测即可产生），脚本会据此
+推导删除地址；导出流程仍然需要 `ajaxgetrecommendations/`。
+
+### 先只读校验登录态
+
+```bash
+steam-curator-exporter --har capture.har --check
+```
+
+只调用 `ajaxgetrecommendations` 并打印后台组评数量，不会删除任何内容。`--check --dry-run`
+只打印将要请求的地址。
+
+### 交互删除（逐行输入 appid）
+
+```bash
+steam-curator-exporter --har capture.har --delete
+```
+
+```text
+appid> 3048420
+[OK] 3048420 {"success":1,"clanid":26214428}
+appid> 4655130
+[OK] 4655130 {"success":1,"clanid":26214428}
+appid> q
+汇总: 成功 2 / 失败 0 / 跳过 0
+```
+
+- 一行一个 appid，回车立即删除；也接受 `https://store.steampowered.com/app/<appid>/...` 链接
+- `#` 开头为注释，空行忽略
+- `q` / `quit` / `exit` 退出，`Ctrl+C` 中断并打印汇总
+- 两次删除之间默认等待 `--delay`（默认 1.5 秒）
+
+### 批量删除
+
+```bash
+steam-curator-exporter --har capture.har --delete-file appids.txt
+```
+
+`appids.txt` 每行一个 appid，规则与交互模式一致；有失败项时退出码为 `1`。
+
+### 预演、去重与重试
+
+```bash
+# 只打印将要发送的请求，不发网络请求
+steam-curator-exporter --har capture.har --delete-file appids.txt --dry-run
+
+# 默认跳过 deleted.log 中已成功的 appid；--force 强制重发
+steam-curator-exporter --har capture.har --delete-file appids.txt --force
+```
+
+删除日志默认写入 `<out>/deleted.log`（可用 `--delete-log` 指定），格式为
+`时间 	 appid 	 OK|FAIL|DRY 	 详情`，不含 Cookie 或 sessionid。
+
+> 删除不可撤销。请先用 `--dry-run` 核对 appid 列表；`{"success":42}` 通常表示 appid 无效或
+> 该组评已不存在，不会被当成成功记录。
 
 ## 配置文件
 
@@ -159,6 +220,11 @@ sessionid 解析顺序：
 | `--keep-raw` | 把每页原始响应保存到 `raw/page_XXXXXX.json` |
 | `--dry-run` | 只打印解析后的配置和目标 URL，不发起网络请求 |
 | `--status` | 只读取输出目录并打印进度，不联网、不需要 Cookie |
+| `--delete` | 交互删除模式，从标准输入逐行读取 appid（必须配合 `--har`） |
+| `--delete-file FILE` | 从文件批量读取 appid 并删除（必须配合 `--har`） |
+| `--delete-log FILE` | 删除日志路径，默认 `<out>/deleted.log` |
+| `--check` | 只读校验登录态并打印后台组评数量（必须配合 `--har`） |
+| `--force` | 忽略删除日志中的成功记录，强制重发 |
 | `--log-level LEVEL` | `DEBUG` / `INFO` / `WARNING` / `ERROR` / `CRITICAL`，默认 `INFO` |
 
 ## 输出文件
@@ -220,6 +286,9 @@ steam-curator-exporter --status --out curator_reviews
 | `2` | 用法或配置错误（缺参数、配置文件/代理/格式不合法） |
 | `3` | 登录态失效、Cookie/sessionid 无效、接口返回登录页或 `success != 1` |
 | `4` | admin 分页未抓完（`next_start < total_count`），可重跑续传 |
+
+删除模式沿用同一套映射：全部成功为 `0`，有 appid 失败为 `1`，参数/文件错误为 `2`，
+登录态失效为 `3`；`Ctrl+C` 中断返回 `1`。
 
 ## 代理
 
@@ -290,7 +359,8 @@ appid|accountid_creator|time_recommended
 Cookie 和 HAR 等同于登录凭据：
 
 - HAR 里通常包含完整 Cookie、`steamLoginSecure`、sessionid，甚至 Steam Guard 令牌。
-- **不要**把 `*.har`、`cookie.txt`、`config.toml` 提交到 Git 或发给他人。
+- **不要**把 `*.har`、`cookie.txt`、`config.toml`、`deleted.log` 提交到 Git 或发给他人。
+- HAR 只需保留到操作完成；删除功能不会把 Cookie 写入日志，但 HAR 本身仍含完整登录态。
 - 本仓库的 `.gitignore` 已忽略这些常见文件，但请自行确认。
 - 本项目的日志只打印 Cookie 长度和 sessionid 是否存在，不打印其内容；代理凭据会打码。
 - 如果怀疑泄露，请在 Steam 中退出所有设备并重新登录，使旧 Cookie 失效。
@@ -312,4 +382,5 @@ ruff check .
 - admin 模式需要有效登录态；Cookie 过期会以退出码 `3` 结束。
 - 默认页间隔 1.5 秒是出于礼貌和降低被限流风险；不要盲目调小。
 - 单进程顺序拉取，没有并发/异步，也不包含 Web UI、数据库 ORM 或定时任务。
+- 删除是单进程顺序执行，没有批量并行；服务端返回 `{"success":42}` 代表 appid 无效或已删除。
 - 本项目不会自动执行 `git init` / `git commit`，版本管理由使用者自行决定。

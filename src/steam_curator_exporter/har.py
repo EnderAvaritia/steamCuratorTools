@@ -11,6 +11,9 @@ from urllib.parse import parse_qs
 from .errors import ConfigError
 from .urls import SOURCE_PUBLIC, extract_sessionid
 
+ENDPOINT_RECOMMENDATIONS = "recommendations"
+ENDPOINT_DELETE = "delete"
+
 
 @dataclass(slots=True)
 class HarInfo:
@@ -63,17 +66,28 @@ def _is_admin_entry(entry: dict[str, Any]) -> bool:
     return "/admin/ajaxgetrecommendations" in url
 
 
+def _is_delete_entry(entry: dict[str, Any]) -> bool:
+    url = str((entry.get("request") or {}).get("url", ""))
+    return "/admin/ajaxdeletereview" in url
+
+
 def _is_public_entry(entry: dict[str, Any]) -> bool:
     url = str((entry.get("request") or {}).get("url", ""))
     return "ajaxgetfilteredrecommendations" in url and "/admin/" not in url
 
 
-def load_har(path: Path, source: str | None = None) -> HarInfo:
+def load_har(
+    path: Path,
+    source: str | None = None,
+    *,
+    endpoint: str = ENDPOINT_RECOMMENDATIONS,
+) -> HarInfo:
     """Read a browser HAR and return the best matching curator request.
 
     ``source`` lets callers prefer the entry that matches the requested mode.
-    By default the admin AJAX entry wins; a public entry is used as fallback.
-    Gzip/Brotli flags in the HAR are irrelevant because only request data is read.
+    ``endpoint="delete"`` prefers the ``ajaxdeletereview`` entry so a HAR that
+    only captured a delete click still yields usable credentials. The admin
+    entry remains the default and wins for export/check flows.
     """
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
@@ -86,16 +100,19 @@ def load_har(path: Path, source: str | None = None) -> HarInfo:
     if not isinstance(entries, list):
         raise ConfigError("HAR 结构异常：log.entries 不是数组")
     admin_entries = [entry for entry in entries if _is_admin_entry(entry)]
+    delete_entries = [entry for entry in entries if _is_delete_entry(entry)]
     public_entries = [entry for entry in entries if _is_public_entry(entry)]
 
-    if source == SOURCE_PUBLIC:
-        selected = public_entries or admin_entries
+    if endpoint == ENDPOINT_DELETE:
+        selected = delete_entries or admin_entries or public_entries
+    elif source == SOURCE_PUBLIC:
+        selected = public_entries or admin_entries or delete_entries
     else:
-        selected = admin_entries or public_entries
+        selected = admin_entries or delete_entries or public_entries
 
     if not selected:
         raise ConfigError(
-            "HAR 中没有找到包含 ajaxgetrecommendations 或 "
+            "HAR 中没有找到包含 ajaxgetrecommendations、ajaxdeletereview 或 "
             "ajaxgetfilteredrecommendations 的请求"
         )
 

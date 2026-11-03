@@ -6,7 +6,7 @@ import argparse
 import logging
 import sys
 import traceback
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -21,14 +21,17 @@ from .config import (
     resolve_cookie,
     resolve_sessionid,
 )
+from .deleter import iter_stdin, run_check, run_delete
 from .errors import AuthError, ConfigError, SteamError, UsageError
-from .har import HarInfo, load_har
+from .har import ENDPOINT_DELETE, HarInfo, load_har
 from .http import HttpTransport, collect_proxies, mask_proxy
 from .runner import Runner, print_status
 from .sources import build_source
 from .urls import (
     SOURCE_ADMIN,
     SOURCE_PUBLIC,
+    build_delete_url,
+    build_recommendations_url,
     build_url_candidates,
     convert_endpoint_source,
     extract_clan_id,
@@ -40,7 +43,7 @@ LOGGER_NAME = "steam_curator_exporter"
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="steam-curator-exporter",
-        description="拉取 Steam 鉴赏家组的全部组评（支持断点续传、代理轮换、多种导出格式）",
+        description="拉取或删除 Steam 鉴赏家组评（支持断点续传、代理轮换、多种导出格式）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "示例：\n"
@@ -48,7 +51,10 @@ def build_parser() -> argparse.ArgumentParser:
             "  steam-curator-exporter --clan-id 26214428 --name \"组名\" "
             "--cookie-file cookie.txt\n"
             "  steam-curator-exporter --source public --clan-id 26214428 --name \"组名\"\n"
-            "  steam-curator-exporter --status --out curator_reviews"
+            "  steam-curator-exporter --status --out curator_reviews\n"
+            "  steam-curator-exporter --har capture.har --delete\n"
+            "  steam-curator-exporter --har capture.har --delete-file appids.txt\n"
+            "  steam-curator-exporter --har capture.har --check"
         ),
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -94,6 +100,16 @@ def build_parser() -> argparse.ArgumentParser:
                         help="只解析参数并打印将要请求的目标，不发起网络请求")
     parser.add_argument("--status", action="store_true",
                         help="只读取输出目录并打印已拉取条数/进度，不发起网络请求")
+    parser.add_argument("--delete", action="store_true",
+                        help="交互删除模式：从标准输入逐行读取 appid（必须配合 --har）")
+    parser.add_argument("--delete-file", metavar="FILE",
+                        help="从文本文件逐行读取 appid 批量删除（必须配合 --har）")
+    parser.add_argument("--delete-log", metavar="FILE",
+                        help="删除日志路径（默认 <out>/deleted.log）")
+    parser.add_argument("--check", action="store_true",
+                        help="只读校验登录态，打印后台组评数量，不修改数据（必须配合 --har）")
+    parser.add_argument("--force", action="store_true",
+                        help="忽略删除日志中已成功的 appid，强制重发")
     parser.add_argument("--log-level", default=None,
                         help="日志级别：DEBUG/INFO/WARNING/ERROR/CRITICAL（默认 INFO）")
     return parser
@@ -126,7 +142,7 @@ def _cli_values(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
-def setup_logging(out_dir: Path, level: str) -> logging.Logger:
+def setup_logging(out_dir: Path, level: str, log_name: str = "run.log") -> logging.Logger:
     out_dir.mkdir(parents=True, exist_ok=True)
     logger = logging.getLogger(LOGGER_NAME)
     logger.setLevel(logging_level(level))
@@ -138,7 +154,7 @@ def setup_logging(out_dir: Path, level: str) -> logging.Logger:
     console.setFormatter(formatter)
     logger.addHandler(console)
 
-    file_handler = logging.FileHandler(out_dir / "run.log", encoding="utf-8")
+    file_handler = logging.FileHandler(out_dir / log_name, encoding="utf-8")
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
     return logger
@@ -158,10 +174,15 @@ def _load_config(args: argparse.Namespace) -> tuple[Config, dict[str, Any]]:
     return config, file_data
 
 
-def _apply_har(args: argparse.Namespace, config: Config) -> HarInfo:
+def _apply_har(
+    args: argparse.Namespace,
+    config: Config,
+    *,
+    endpoint: str = "recommendations",
+) -> HarInfo:
     if not args.har:
         return HarInfo()
-    return load_har(Path(args.har).expanduser(), config.source)
+    return load_har(Path(args.har).expanduser(), config.source, endpoint=endpoint)
 
 
 def _prepare_inputs(args: argparse.Namespace, config: Config, file_data: dict[str, Any],
@@ -191,16 +212,123 @@ def _prepare_inputs(args: argparse.Namespace, config: Config, file_data: dict[st
         raise UsageError("需要 --clan-id 或 --url（也可以直接用 --har 自动解析）")
 
 
+def _delete_mode(args: argparse.Namespace) -> bool:
+    return bool(args.delete or args.delete_file)
+
+
+def _validate_modes(args: argparse.Namespace, config: Config, delete_mode: bool) -> None:
+    if args.delete and args.delete_file:
+        raise UsageError("--delete 与 --delete-file 只能二选一")
+    if delete_mode and args.check:
+        raise UsageError("--check 不能与删除模式同时使用")
+    if args.check and args.status:
+        raise UsageError("--check 不能与 --status 同时使用")
+    if delete_mode and args.status:
+        raise UsageError("--status 不能与删除模式同时使用")
+    if (delete_mode or args.check) and not args.har:
+        raise UsageError("删除/校验模式必须用 --har 指定 HAR 文件")
+    if (delete_mode or args.check) and config.source != SOURCE_ADMIN:
+        raise UsageError("删除/校验需要 admin 登录态，不能使用 --source public")
+
+
+def _appid_lines(args: argparse.Namespace) -> tuple[Iterable[str], bool]:
+    if not args.delete_file:
+        return iter_stdin(), True
+    path = Path(args.delete_file).expanduser()
+    try:
+        text = path.read_text(encoding="utf-8-sig", errors="replace")
+    except OSError as exc:
+        raise ConfigError(f"读取 appid 文件失败: {exc}") from exc
+    return text.splitlines(), False
+
+
+def _run_delete(args: argparse.Namespace, config: Config, out_dir: Path) -> int:
+    delete_url = build_delete_url(config.clan_id, config.url)
+    if not delete_url:
+        raise UsageError("无法构造删除接口地址，请提供 --har 或 --clan-id")
+    log_path = (
+        Path(args.delete_log).expanduser() if args.delete_log else out_dir / "deleted.log"
+    )
+    lines, interactive = _appid_lines(args)
+    logger = setup_logging(out_dir, config.log_level, "delete.log")
+    transport: HttpTransport | None = None
+    try:
+        logger.info("删除接口: %s", delete_url)
+        logger.info("删除日志: %s", log_path)
+        logger.info("交互输入 q / quit / exit 结束；Ctrl+C 中断")
+        if args.dry_run:
+            logger.info("--dry-run 已启用，不会发送删除请求。")
+        else:
+            transport = HttpTransport(
+                proxies=config.proxy,
+                timeout=config.timeout,
+                retries=config.retries,
+                logger=logger,
+            )
+        return run_delete(
+            config,
+            delete_url=delete_url,
+            log_path=log_path,
+            lines=lines,
+            interactive=interactive,
+            dry_run=args.dry_run,
+            force=args.force,
+            logger=logger,
+            transport=transport,
+        )
+    finally:
+        if transport is not None:
+            transport.close()
+        close_logging(logger)
+
+
+def _run_check(args: argparse.Namespace, config: Config, out_dir: Path) -> int:
+    check_url = build_recommendations_url(config.clan_id, config.url)
+    if not check_url:
+        raise UsageError("无法构造校验接口地址，请提供 --har 或 --clan-id")
+    if args.dry_run:
+        print(f"[DRY] --check POST {check_url} data=sessionid=<hidden>")
+        return 0
+    logger = setup_logging(out_dir, config.log_level, "check.log")
+    transport: HttpTransport | None = None
+    try:
+        transport = HttpTransport(
+            proxies=config.proxy,
+            timeout=config.timeout,
+            retries=config.retries,
+            logger=logger,
+        )
+        return run_check(config, url=check_url, logger=logger, transport=transport)
+    finally:
+        if transport is not None:
+            transport.close()
+        close_logging(logger)
+
+
 def _run(args: argparse.Namespace) -> int:
     config, file_data = _load_config(args)
     out_dir = Path(config.out).expanduser().resolve()
+    delete_mode = _delete_mode(args)
+    _validate_modes(args, config, delete_mode)
 
     if args.status:
         return print_status(out_dir)
 
-    har_info = _apply_har(args, config)
+    endpoint = ENDPOINT_DELETE if delete_mode else "recommendations"
+    har_info = _apply_har(args, config, endpoint=endpoint)
     _prepare_inputs(args, config, file_data, har_info)
     config.proxy = collect_proxies(config.proxy, config.proxy_file)
+
+    if delete_mode:
+        return _run_delete(args, config, out_dir)
+    if args.check:
+        return _run_check(args, config, out_dir)
+    if config.url and "ajaxdeletereview" in config.url:
+        raise UsageError(
+            "该 HAR 只包含 ajaxdeletereview 请求，无法用于导出；"
+            "请在 reviews_manage 页面加载列表后重新导出 HAR"
+        )
+
     candidates = build_url_candidates(
         config.clan_id,
         config.name,

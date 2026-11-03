@@ -112,6 +112,8 @@ class FakeTransport:
         data: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         timeout: float | None = None,
+        retries: int | None = None,
+        raise_for_status: bool = True,
     ) -> FakeResponse:
         call = {
             "method": method,
@@ -120,6 +122,8 @@ class FakeTransport:
             "data": dict(data or {}),
             "headers": dict(headers or {}),
             "timeout": timeout,
+            "retries": retries,
+            "raise_for_status": raise_for_status,
         }
         self.calls.append(call)
         if self.handler is not None:

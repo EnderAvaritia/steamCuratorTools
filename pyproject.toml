@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "steam-curator-exporter"
-version = "0.1.0"
-description = "Export all Steam curator recommendations with resume support"
+version = "0.2.0"
+description = "Export and delete Steam curator reviews with resume and proxy support"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "EnderAvaritia" }]
-keywords = ["steam", "curator", "reviews", "exporter"]
+keywords = ["steam", "curator", "reviews", "exporter", "delete"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",

@@ -170,3 +170,114 @@ def test_cli_end_to_end_with_fake_transport(
     payload = json.loads((out / "reviews.json").read_text(encoding="utf-8"))
     assert payload["fetched_count"] == 1
     assert (out / "reviews.csv").read_bytes().startswith(b"\xef\xbb\xbf")
+
+
+def test_cli_delete_requires_har(tmp_path: Path, capsys) -> None:
+    code = cli.main(["--delete", "--clan-id", "26214428", "--out", str(tmp_path / "d")])
+    assert code == 2
+    assert "--har" in capsys.readouterr().err
+
+
+def test_cli_delete_file_dry_run(tmp_path: Path, capsys) -> None:
+    appids = tmp_path / "appids.txt"
+    appids.write_text("111\n# comment\n222\n", encoding="utf-8")
+    out = tmp_path / "del"
+    code = cli.main(
+        [
+            "--har",
+            str(ADMIN_HAR),
+            "--delete-file",
+            str(appids),
+            "--out",
+            str(out),
+            "--dry-run",
+        ]
+    )
+    assert code == 0
+    printed = capsys.readouterr().out
+    assert "[DRY] 111" in printed
+    assert "[DRY] 222" in printed
+    assert "sessionid=<hidden>" in printed
+    log = out / "deleted.log"
+    assert log.read_text(encoding="utf-8").count("DRY") == 2
+
+
+def test_cli_check_dry_run(tmp_path: Path, capsys) -> None:
+    code = cli.main(
+        ["--har", str(ADMIN_HAR), "--check", "--dry-run", "--out", str(tmp_path / "chk")]
+    )
+    assert code == 0
+    assert "[DRY] --check" in capsys.readouterr().out
+
+
+def test_cli_delete_rejects_public_source(tmp_path: Path, capsys) -> None:
+    code = cli.main(
+        [
+            "--har",
+            str(ADMIN_HAR),
+            "--delete",
+            "--source",
+            "public",
+            "--out",
+            str(tmp_path / "pub"),
+        ]
+    )
+    assert code == 2
+    assert "admin" in capsys.readouterr().err
+
+
+def test_cli_export_rejects_delete_only_har(tmp_path: Path, capsys) -> None:
+    har = {
+        "log": {
+            "entries": [
+                {
+                    "request": {
+                        "url": "https://store.steampowered.com/curator/1-x"
+                        "/admin/ajaxdeletereview/",
+                        "headers": [{"name": "Cookie", "value": "sessionid=abcd"}],
+                    }
+                }
+            ]
+        }
+    }
+    path = tmp_path / "delete.har"
+    path.write_text(json.dumps(har), encoding="utf-8")
+    code = cli.main(["--har", str(path), "--out", str(tmp_path / "exp")])
+    assert code == 2
+    assert "ajaxdeletereview" in capsys.readouterr().err
+
+
+def test_cli_delete_accepts_delete_only_har(tmp_path: Path, capsys) -> None:
+    har = {
+        "log": {
+            "entries": [
+                {
+                    "request": {
+                        "url": "https://store.steampowered.com/curator/1-x"
+                        "/admin/ajaxdeletereview/",
+                        "headers": [{"name": "Cookie", "value": "sessionid=abcd"}],
+                    }
+                }
+            ]
+        }
+    }
+    path = tmp_path / "delete.har"
+    path.write_text(json.dumps(har), encoding="utf-8")
+    appids = tmp_path / "appids.txt"
+    appids.write_text("555", encoding="utf-8")
+    out = tmp_path / "del"
+    code = cli.main(
+        [
+            "--har",
+            str(path),
+            "--delete-file",
+            str(appids),
+            "--out",
+            str(out),
+            "--dry-run",
+        ]
+    )
+    assert code == 0
+    printed = capsys.readouterr().out
+    assert "/admin/ajaxdeletereview/" in printed
+    assert "[DRY] 555" in printed

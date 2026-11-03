@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from steam_curator_exporter.urls import (
     ADMIN_AJAX_SUFFIX,
+    ADMIN_DELETE_SUFFIX,
     ADMIN_REFERER_SUFFIX,
     PUBLIC_AJAX_SUFFIX,
+    build_delete_url,
+    build_recommendations_url,
     build_referer,
     build_url_candidates,
     convert_endpoint_source,
@@ -11,6 +14,7 @@ from steam_curator_exporter.urls import (
     encode_curator_name_legacy,
     extract_clan_id,
     extract_sessionid,
+    swap_endpoint,
 )
 
 
@@ -71,3 +75,33 @@ def test_extract_ids() -> None:
     assert extract_clan_id("https://example.test/") is None
     assert extract_sessionid("a=1; sessionid=deadbeef; b=2") == "deadbeef"
     assert extract_sessionid("a=1") is None
+
+
+def test_build_delete_url_variants() -> None:
+    admin = "https://store.steampowered.com/curator/1-x" + ADMIN_AJAX_SUFFIX
+    delete = "https://store.steampowered.com/curator/1-x" + ADMIN_DELETE_SUFFIX
+    assert build_delete_url("1", admin) == delete
+    assert build_delete_url("1") == (
+        "https://store.steampowered.com/curator/1" + ADMIN_DELETE_SUFFIX
+    )
+    assert build_delete_url(None, delete) == delete
+    assert build_delete_url(None, "https://example.test/endpoint") is None
+
+
+def test_build_recommendations_url_from_delete() -> None:
+    delete = "https://store.steampowered.com/curator/1-x" + ADMIN_DELETE_SUFFIX
+    assert build_recommendations_url("1", delete).endswith(ADMIN_AJAX_SUFFIX)
+    assert build_recommendations_url("1").endswith(ADMIN_AJAX_SUFFIX)
+
+
+def test_swap_endpoint_preserves_query_and_tolerates_no_slash() -> None:
+    url = "https://store.steampowered.com/curator/1-x/admin/ajaxgetrecommendations?a=1"
+    swapped = swap_endpoint(url, ADMIN_DELETE_SUFFIX)
+    assert swapped == (
+        "https://store.steampowered.com/curator/1-x/admin/ajaxdeletereview/?a=1"
+    )
+
+
+def test_referer_for_delete_endpoint() -> None:
+    delete = "https://store.steampowered.com/curator/1-x" + ADMIN_DELETE_SUFFIX
+    assert build_referer(delete, "1").endswith(ADMIN_REFERER_SUFFIX)

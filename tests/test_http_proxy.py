@@ -155,3 +155,27 @@ def test_exhausted_retries_fail(logger) -> None:
 def test_html_login_page_helper_is_usable() -> None:
     response = html_response("<html>login</html>")
     assert "html" in response.headers["content-type"]
+
+
+def test_raise_for_status_false_returns_5xx_without_retry(logger) -> None:
+    session = RecordingSession([FakeResponse(status_code=500, text='{"success":42}')])
+    transport = HttpTransport(session=session, retries=5, logger=logger, sleep=lambda s: None)
+    response = transport.request(
+        "POST", "https://example.test/", raise_for_status=False
+    )
+    assert response.status_code == 500
+    assert session.calls == 1
+
+
+def test_request_retries_override(logger) -> None:
+    session = RecordingSession([FakeResponse(status_code=500), FakeResponse(status_code=500)])
+    transport = HttpTransport(
+        session=session,
+        retries=5,
+        logger=logger,
+        sleep=lambda s: None,
+        jitter=lambda low, high: 0.0,
+    )
+    with pytest.raises(SteamError, match="连续失败 2 次"):
+        transport.request("GET", "https://example.test/", retries=2)
+    assert session.calls == 2

@@ -179,11 +179,21 @@ class HttpTransport:
         data: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         timeout: float | None = None,
+        retries: int | None = None,
+        raise_for_status: bool = True,
     ) -> HttpResponse:
+        """Execute one logical request.
+
+        ``retries`` overrides the transport-wide attempt budget for this call.
+        ``raise_for_status=False`` returns any non-auth response (including 4xx/5xx)
+        so callers can inspect JSON error bodies such as ``{"success": 42}``
+        instead of retrying blindly.
+        """
         last_error: Exception | None = None
         effective_timeout = self.timeout if timeout is None else timeout
+        max_attempts = self.retries if retries is None else max(1, retries)
 
-        for attempt in range(1, self.retries + 1):
+        for attempt in range(1, max_attempts + 1):
             proxy = self.proxy_pool.next()
             if proxy:
                 self.session.proxies = {"http": proxy, "https": proxy}
@@ -191,7 +201,7 @@ class HttpTransport:
                     "本次使用代理: %s（第 %d/%d 次尝试）",
                     mask_proxy(proxy),
                     attempt,
-                    self.retries,
+                    max_attempts,
                 )
             try:
                 specific = getattr(self.session, method.lower(), None)
@@ -214,7 +224,7 @@ class HttpTransport:
                     )
             except requests.exceptions.RequestException as exc:
                 last_error = exc
-                self.logger.warning("网络错误（第 %d/%d 次）: %s", attempt, self.retries, exc)
+                self.logger.warning("网络错误（第 %d/%d 次）: %s", attempt, max_attempts, exc)
             else:
                 status = int(response.status_code)
                 if status in (401, 403):
@@ -222,27 +232,29 @@ class HttpTransport:
                         f"HTTP {status}：Cookie/sessionid 无效或已过期，"
                         "请重新导出 HAR 或更新 Cookie"
                     )
+                if not raise_for_status:
+                    return response
                 if status == 429:
                     last_error = SteamError("HTTP 429：请求过于频繁")
-                    self.logger.warning("被限流（第 %d/%d 次），稍后重试", attempt, self.retries)
+                    self.logger.warning("被限流（第 %d/%d 次），稍后重试", attempt, max_attempts)
                 elif status >= 500:
                     last_error = SteamError(f"HTTP {status}")
                     self.logger.warning(
-                        "服务端错误 %s（第 %d/%d 次）", status, attempt, self.retries
+                        "服务端错误 %s（第 %d/%d 次）", status, attempt, max_attempts
                     )
                 elif status >= 400:
                     raise SteamError(f"HTTP {status}: {response.reason}")
                 else:
                     return response
 
-            if attempt < self.retries:
+            if attempt < max_attempts:
                 backoff = min(self.base_backoff * (2 ** (attempt - 1)), self.max_backoff)
                 wait = backoff + self._jitter(0.0, 2.0)
                 self.logger.info("等待 %.1f 秒后重试...", wait)
                 self._sleep(wait)
 
         raise SteamError(f"请求 {url}（start={params.get('start') if params else '?'}）"
-                         f"连续失败 {self.retries} 次: {last_error}")
+                         f"连续失败 {max_attempts} 次: {last_error}")
 
     def close(self) -> None:
         close = getattr(self.session, "close", None)

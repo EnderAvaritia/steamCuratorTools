@@ -18,6 +18,7 @@ htmlcov/
 # Project outputs / local data
 curator_reviews/
 *.har
+deleted.log
 cookie.txt
 cookies.txt
 proxies.txt
@@ -27,6 +28,7 @@ config.toml
 
 # Sanitized test fixtures must be committed
 !tests/fixtures/*.har
+deleted.log
 
 # OS / editors
 .DS_Store
