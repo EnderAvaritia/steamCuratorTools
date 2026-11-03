@@ -339,7 +339,11 @@ def run_check(
         print("检查失败: 响应缺少 recommendations 列表")
         return 1
 
-    print(f"检查成功: 当前后台组评 {len(recommendations)} 条")
+    total = payload.get("total_count")
+    if isinstance(total, int):
+        print(f"检查成功: 后台组评共 {total} 条（本页 {len(recommendations)} 条）")
+    else:
+        print(f"检查成功: 本页返回 {len(recommendations)} 条组评")
     for item in recommendations[:5]:
         if isinstance(item, dict):
             print(f"{item.get('appid')} {item.get('app_name', '')}")

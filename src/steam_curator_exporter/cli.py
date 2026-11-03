@@ -28,6 +28,7 @@ from .http import HttpTransport, collect_proxies, mask_proxy
 from .runner import Runner, print_status
 from .sources import build_source
 from .urls import (
+    ADMIN_AJAX_SUFFIX,
     SOURCE_ADMIN,
     SOURCE_PUBLIC,
     build_delete_url,
@@ -35,6 +36,7 @@ from .urls import (
     build_url_candidates,
     convert_endpoint_source,
     extract_clan_id,
+    swap_endpoint,
 )
 
 LOGGER_NAME = "steam_curator_exporter"
@@ -196,6 +198,10 @@ def _prepare_inputs(args: argparse.Namespace, config: Config, file_data: dict[st
         parts = urlsplit(har_info.url)
         base_url = urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
         config.url = convert_endpoint_source(base_url, config.source)
+    if config.url and "ajaxdeletereview" in config.url and config.source == SOURCE_ADMIN:
+        # A delete-only HAR still carries valid credentials; reuse it for export/check
+        # by pointing at the read-only recommendations endpoint.
+        config.url = swap_endpoint(config.url, ADMIN_AJAX_SUFFIX) or config.url
     if not config.clan_id:
         config.clan_id = extract_clan_id(config.url)
 

@@ -226,7 +226,7 @@ def test_cli_delete_rejects_public_source(tmp_path: Path, capsys) -> None:
     assert "admin" in capsys.readouterr().err
 
 
-def test_cli_export_rejects_delete_only_har(tmp_path: Path, capsys) -> None:
+def _write_delete_har(tmp_path: Path) -> Path:
     har = {
         "log": {
             "entries": [
@@ -242,7 +242,36 @@ def test_cli_export_rejects_delete_only_har(tmp_path: Path, capsys) -> None:
     }
     path = tmp_path / "delete.har"
     path.write_text(json.dumps(har), encoding="utf-8")
-    code = cli.main(["--har", str(path), "--out", str(tmp_path / "exp")])
+    return path
+
+
+def test_cli_export_derives_recommendations_url_from_delete_har(
+    tmp_path: Path, capsys
+) -> None:
+    path = _write_delete_har(tmp_path)
+    code = cli.main(
+        ["--har", str(path), "--out", str(tmp_path / "exp"), "--dry-run"]
+    )
+    assert code == 0
+    printed = capsys.readouterr().out
+    assert "/admin/ajaxgetrecommendations/" in printed
+
+
+def test_cli_export_rejects_delete_only_har_for_public_source(
+    tmp_path: Path, capsys
+) -> None:
+    path = _write_delete_har(tmp_path)
+    code = cli.main(
+        [
+            "--har",
+            str(path),
+            "--source",
+            "public",
+            "--out",
+            str(tmp_path / "exp"),
+            "--dry-run",
+        ]
+    )
     assert code == 2
     assert "ajaxdeletereview" in capsys.readouterr().err
 
