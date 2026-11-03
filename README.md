@@ -1,4 +1,4 @@
-# steam-curator-tools
+# steamCuratorTools
 
 把一个 Steam 鉴赏家组的「组评」全量拉到本地，或按 appid 逐条删除，支持断点续传、
 失败重试、代理轮换，并导出为 JSON / CSV / SQLite。
@@ -378,8 +378,8 @@ ruff check .
 
 ### 命名约定
 
-- 项目 / 发行名：`steam-curator-tools`
-- Python 包名与命令行：`steamCuratorTools`（lowerCamelCase）
+- 项目 / 发行名 / Python 包名 / 命令行：统一为 `steamCuratorTools`（lowerCamelCase）
+- 注意：PyPI 等平台会按 PEP 503 归一化为 `steamcuratortools`，安装时可写 `steamCuratorTools`
 - 源码内的函数、变量、参数、字段统一 lowerCamelCase；类名保持 PascalCase
 - 对外契约保持稳定：CLI 参数仍是 `--clan-id` 短横线形式，TOML 配置键、JSON/CSV/SQLite
   字段名、环境变量均未改名，旧配置文件与导出结果可继续使用

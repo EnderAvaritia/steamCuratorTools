@@ -3,7 +3,7 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "steam-curator-tools"
+name = "steamCuratorTools"
 version = "0.3.0"
 description = "Export and delete Steam curator reviews with resume and proxy support"
 readme = "README.md"
