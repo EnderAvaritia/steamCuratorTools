@@ -1,4 +1,4 @@
-# steam-curator-exporter
+# steam-curator-tools
 
 把一个 Steam 鉴赏家组的「组评」全量拉到本地，或按 appid 逐条删除，支持断点续传、
 失败重试、代理轮换，并导出为 JSON / CSV / SQLite。
@@ -31,10 +31,10 @@ python -m venv .venv
 pip install -e ".[dev]"
 ```
 
-安装后可直接使用 `steam-curator-exporter` 命令，也可以：
+安装后可直接使用 `steamCuratorTools` 命令，也可以：
 
 ```bash
-python -m steam_curator_exporter --help
+python -m steamCuratorTools --help
 ```
 
 需要 socks 代理时，额外安装 PySocks：
@@ -53,7 +53,7 @@ pip install "requests[socks]"
 4. 运行：
 
 ```bash
-steam-curator-exporter --har capture.har --out curator_reviews
+steamCuratorTools --har capture.har --out curator_reviews
 ```
 
 程序会从 HAR 中自动读取 URL、Cookie、sessionid 和 Referer，并优先使用后台接口。
@@ -69,7 +69,7 @@ steamLoginSecure=...; sessionid=...; browserid=...
 然后：
 
 ```bash
-steam-curator-exporter --clan-id 26214428 --name "电竞狂热爱好者" \
+steamCuratorTools --clan-id 26214428 --name "电竞狂热爱好者" \
   --cookie-file cookie.txt --out curator_reviews
 ```
 
@@ -79,7 +79,7 @@ steam-curator-exporter --clan-id 26214428 --name "电竞狂热爱好者" \
 ### 方式三：公开接口（无需登录）
 
 ```bash
-steam-curator-exporter --source public --clan-id 26214428 --name "电竞狂热爱好者" \
+steamCuratorTools --source public --clan-id 26214428 --name "电竞狂热爱好者" \
   --out public_reviews
 ```
 
@@ -95,7 +95,7 @@ HAR 里可以只包含 `admin/ajaxdeletereview/` 请求（在管理页删除一�
 ### 先只读校验登录态
 
 ```bash
-steam-curator-exporter --har capture.har --check
+steamCuratorTools --har capture.har --check
 ```
 
 只调用 `ajaxgetrecommendations` 并打印后台组评数量，不会删除任何内容。`--check --dry-run`
@@ -104,7 +104,7 @@ steam-curator-exporter --har capture.har --check
 ### 交互删除（逐行输入 appid）
 
 ```bash
-steam-curator-exporter --har capture.har --delete
+steamCuratorTools --har capture.har --delete
 ```
 
 ```text
@@ -124,7 +124,7 @@ appid> q
 ### 批量删除
 
 ```bash
-steam-curator-exporter --har capture.har --delete-file appids.txt
+steamCuratorTools --har capture.har --delete-file appids.txt
 ```
 
 `appids.txt` 每行一个 appid，规则与交互模式一致；有失败项时退出码为 `1`。
@@ -133,10 +133,10 @@ steam-curator-exporter --har capture.har --delete-file appids.txt
 
 ```bash
 # 只打印将要发送的请求，不发网络请求
-steam-curator-exporter --har capture.har --delete-file appids.txt --dry-run
+steamCuratorTools --har capture.har --delete-file appids.txt --dry-run
 
 # 默认跳过 deleted.log 中已成功的 appid；--force 强制重发
-steam-curator-exporter --har capture.har --delete-file appids.txt --force
+steamCuratorTools --har capture.har --delete-file appids.txt --force
 ```
 
 删除日志默认写入 `<out>/deleted.log`（可用 `--delete-log` 指定），格式为
@@ -176,7 +176,7 @@ log_level = "INFO"
 对应的命令行：
 
 ```bash
-steam-curator-exporter --config config.toml
+steamCuratorTools --config config.toml
 ```
 
 Cookie 解析顺序：
@@ -259,19 +259,19 @@ link_url, link_text, blurb
 
 ```bash
 # 首次运行
-steam-curator-exporter --har capture.har --out curator_reviews
+steamCuratorTools --har capture.har --out curator_reviews
 
 # 中断后重跑同一条命令即可自动续传
-steam-curator-exporter --har capture.har --out curator_reviews
+steamCuratorTools --har capture.har --out curator_reviews
 
 # 显式要求续传
-steam-curator-exporter --har capture.har --out curator_reviews --resume
+steamCuratorTools --har capture.har --out curator_reviews --resume
 
 # 清空后重新全量拉取
-steam-curator-exporter --har capture.har --out curator_reviews --fresh
+steamCuratorTools --har capture.har --out curator_reviews --fresh
 
 # 随时查看进度（不联网）
-steam-curator-exporter --status --out curator_reviews
+steamCuratorTools --status --out curator_reviews
 ```
 
 `--fresh` 只清理本工具管理的文件（`reviews.jsonl`、`reviews.json`、`reviews.csv`、
@@ -294,19 +294,19 @@ steam-curator-exporter --status --out curator_reviews
 
 ```bash
 # 单个
-steam-curator-exporter --har capture.har --proxy http://127.0.0.1:10279
+steamCuratorTools --har capture.har --proxy http://127.0.0.1:10279
 
 # 多个（每个请求/每次重试轮换）
-steam-curator-exporter --har capture.har \
+steamCuratorTools --har capture.har \
   --proxy http://127.0.0.1:10279 \
   --proxy socks5://127.0.0.1:1080
 
 # 逗号分隔
-steam-curator-exporter --har capture.har \
+steamCuratorTools --har capture.har \
   --proxy "http://a:8080,socks5h://b:1080"
 
 # 文件
-steam-curator-exporter --har capture.har --proxy-file proxies.txt
+steamCuratorTools --har capture.har --proxy-file proxies.txt
 ```
 
 - 不写协议时自动补 `http://`，例如 `127.0.0.1:8080`。
@@ -375,6 +375,14 @@ ruff check .
 
 测试全部使用内存中的假 transport，不会访问 Steam。CI 在 Python 3.11 / 3.12 / 3.13 上
 运行 ruff 和 pytest。
+
+### 命名约定
+
+- 项目 / 发行名：`steam-curator-tools`
+- Python 包名与命令行：`steamCuratorTools`（lowerCamelCase）
+- 源码内的函数、变量、参数、字段统一 lowerCamelCase；类名保持 PascalCase
+- 对外契约保持稳定：CLI 参数仍是 `--clan-id` 短横线形式，TOML 配置键、JSON/CSV/SQLite
+  字段名、环境变量均未改名，旧配置文件与导出结果可继续使用
 
 ## 已知限制
 

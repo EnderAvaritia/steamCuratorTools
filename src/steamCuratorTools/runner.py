@@ -12,20 +12,20 @@ from typing import Any
 from .config import Config
 from .errors import AuthError, SteamError
 from .http import HttpTransport
-from .models import entry_key, format_duration, item_appid
+from .models import entryKey, formatDuration, itemAppid
 from .sources import Page, ReviewSource
 from .storage import (
-    append_entry,
-    clean_outputs,
-    export_outputs,
-    load_existing_entries,
-    load_state,
-    save_raw_page,
-    save_state,
+    appendEntry,
+    cleanOutputs,
+    exportOutputs,
+    loadExistingEntries,
+    loadState,
+    saveRawPage,
+    saveState,
 )
-from .urls import SOURCE_ADMIN, build_url_candidates
+from .urls import buildUrlCandidates, sourceAdmin
 
-SNAPSHOT_EVERY_PAGES = 10
+snapshotEveryPages = 10
 
 
 class Runner:
@@ -37,7 +37,7 @@ class Runner:
         logger: logging.Logger,
         transport: HttpTransport,
         source: ReviewSource,
-        out_dir: Path | None = None,
+        outDir: Path | None = None,
         sleep: Callable[[float], None] | None = None,
         jitter: Callable[[float, float], float] | None = None,
     ) -> None:
@@ -45,40 +45,40 @@ class Runner:
         self.logger = logger
         self.transport = transport
         self.source = source
-        self.out_dir = (out_dir or Path(config.out)).expanduser().resolve()
+        self.outDir = (outDir or Path(config.out)).expanduser().resolve()
         self._sleep = sleep if sleep is not None else time.sleep
         self._jitter = jitter if jitter is not None else random.uniform
 
         self.state: dict[str, Any] = {}
         self.entries: dict[str, Mapping[str, Any]] = {}
-        self.resolved_url: str | None = None
-        self.next_start = 0
-        self.total_count = 0
+        self.resolvedUrl: str | None = None
+        self.nextStart = 0
+        self.totalCount = 0
         self.pages = 0
-        self.empty_seen = False
-        self.run_started_at = 0.0
-        self.run_start_offset = 0
+        self.emptySeen = False
+        self.runStartedAt = 0.0
+        self.runStartOffset = 0
 
     def run(self) -> int:
-        self.out_dir.mkdir(parents=True, exist_ok=True)
+        self.outDir.mkdir(parents=True, exist_ok=True)
         if self.config.fresh:
-            clean_outputs(self.out_dir)
+            cleanOutputs(self.outDir)
 
-        self.state = load_state(self.out_dir)
-        self.entries = load_existing_entries(self.out_dir)
+        self.state = loadState(self.outDir)
+        self.entries = loadExistingEntries(self.outDir)
         resume = bool(self.state) and not self.config.fresh
         if self.config.resume and self.state:
             resume = True
 
         if resume:
-            self.next_start = _int(self.state.get("next_start"))
-            self.total_count = _int(self.state.get("total_count"))
-            self.resolved_url = self.config.url or _text(self.state.get("url")) or None
-            self.empty_seen = bool(self.state.get("complete"))
+            self.nextStart = _int(self.state.get("next_start"))
+            self.totalCount = _int(self.state.get("total_count"))
+            self.resolvedUrl = self.config.url or _text(self.state.get("url")) or None
+            self.emptySeen = bool(self.state.get("complete"))
             self.logger.info(
                 "检测到断点：已抓取 %d 条，下次从 start=%d 继续",
                 len(self.entries),
-                self.next_start,
+                self.nextStart,
             )
         elif self.entries:
             self.logger.warning(
@@ -86,8 +86,8 @@ class Runner:
                 len(self.entries),
             )
 
-        candidates = build_url_candidates(
-            self.config.clan_id,
+        candidates = buildUrlCandidates(
+            self.config.clanId,
             self.config.name,
             self.config.url,
             self.config.source,
@@ -95,104 +95,104 @@ class Runner:
         for candidate in candidates:
             self.logger.info("候选 URL: %s", candidate)
 
-        first_payload: Page | None = None
-        if self.resolved_url:
-            self.logger.info("沿用断点记录的接口地址: %s", self.resolved_url)
+        firstPayload: Page | None = None
+        if self.resolvedUrl:
+            self.logger.info("沿用断点记录的接口地址: %s", self.resolvedUrl)
         else:
             try:
-                self.resolved_url, first_payload = self._resolve_endpoint(candidates)
+                self.resolvedUrl, firstPayload = self._resolveEndpoint(candidates)
             except AuthError as exc:
                 self.logger.error("登录态异常：%s", exc)
-                self._save_state()
-                self._write_final_outputs()
+                self._saveState()
+                self._writeFinalOutputs()
                 return 3
             except SteamError as exc:
                 self.logger.error("抓取失败：%s", exc)
-                self._save_state()
-                self._write_final_outputs()
+                self._saveState()
+                self._writeFinalOutputs()
                 return 1
             except Exception as exc:  # noqa: BLE001 - still export whatever exists
                 self.logger.exception("未预期错误：%s", exc)
-                self._save_state()
-                self._write_final_outputs()
+                self._saveState()
+                self._writeFinalOutputs()
                 return 1
             self.state.update(
                 {
-                    "url": self.resolved_url,
-                    "clan_id": self.config.clan_id,
+                    "url": self.resolvedUrl,
+                    "clan_id": self.config.clanId,
                     "source": self.config.source,
-                    "next_start": self.next_start,
-                    "total_count": self.total_count,
+                    "next_start": self.nextStart,
+                    "total_count": self.totalCount,
                 }
             )
-            self._save_state()
+            self._saveState()
 
-        self.run_started_at = time.monotonic()
-        self.run_start_offset = self.next_start
+        self.runStartedAt = time.monotonic()
+        self.runStartOffset = self.nextStart
         failed = False
-        auth_failed = False
+        authFailed = False
 
         try:
-            if first_payload is not None:
-                server_start = self._consume(first_payload)
-                returned = len(first_payload.recommendations)
-                self.next_start = max(self.next_start, server_start + returned)
+            if firstPayload is not None:
+                serverStart = self._consume(firstPayload)
+                returned = len(firstPayload.recommendations)
+                self.nextStart = max(self.nextStart, serverStart + returned)
                 self.pages += 1
-                self._save_state()
-                self._log_progress()
+                self._saveState()
+                self._logProgress()
                 self._snapshot()
-                if not first_payload.recommendations:
+                if not firstPayload.recommendations:
                     self.logger.info("首屏返回 0 条，视为抓取结束。")
-                    self.empty_seen = True
-                if self.config.keep_raw:
-                    save_raw_page(self.out_dir, server_start, first_payload.raw)
+                    self.emptySeen = True
+                if self.config.keepRaw:
+                    saveRawPage(self.outDir, serverStart, firstPayload.raw)
 
-            while self.pages < self.config.max_pages and not self.empty_seen:
-                if self.total_count and self.next_start >= self.total_count:
-                    self.logger.info("已到达 total_count=%d，抓取完成。", self.total_count)
+            while self.pages < self.config.maxPages and not self.emptySeen:
+                if self.totalCount and self.nextStart >= self.totalCount:
+                    self.logger.info("已到达 total_count=%d，抓取完成。", self.totalCount)
                     break
 
-                page = self.source.fetch_page(
-                    self.resolved_url or "",
-                    self.next_start,
+                page = self.source.fetchPage(
+                    self.resolvedUrl or "",
+                    self.nextStart,
                     self.config.count,
                 )
                 recommendations = page.recommendations
                 if not recommendations:
                     self.logger.info("本次返回 0 条，视为抓取结束。")
-                    self.empty_seen = True
-                    if self.config.keep_raw:
-                        save_raw_page(self.out_dir, page.server_start, page.raw)
+                    self.emptySeen = True
+                    if self.config.keepRaw:
+                        saveRawPage(self.outDir, page.serverStart, page.raw)
                     break
 
-                server_start = page.server_start
-                if server_start != self.next_start and self.next_start > 0:
+                serverStart = page.serverStart
+                if serverStart != self.nextStart and self.nextStart > 0:
                     self.logger.warning(
                         "服务端返回 start=%d（请求 %d），以服务端为准",
-                        server_start,
-                        self.next_start,
+                        serverStart,
+                        self.nextStart,
                     )
 
                 self._consume(page)
                 self.pages += 1
 
-                page_end = server_start + len(recommendations)
-                if page_end <= self.next_start:
+                pageEnd = serverStart + len(recommendations)
+                if pageEnd <= self.nextStart:
                     self.logger.error(
                         "分页没有前进（start=%d, 返回 %d 条），为避免死循环中止。",
-                        server_start,
+                        serverStart,
                         len(recommendations),
                     )
                     failed = True
                     break
-                self.next_start = page_end
-                self._save_state()
-                self._log_progress()
-                if self.pages % SNAPSHOT_EVERY_PAGES == 0:
+                self.nextStart = pageEnd
+                self._saveState()
+                self._logProgress()
+                if self.pages % snapshotEveryPages == 0:
                     self._snapshot()
-                if self.config.keep_raw:
-                    save_raw_page(self.out_dir, server_start, page.raw)
-                if self.total_count and self.next_start >= self.total_count:
+                if self.config.keepRaw:
+                    saveRawPage(self.outDir, serverStart, page.raw)
+                if self.totalCount and self.nextStart >= self.totalCount:
                     break
                 if self.config.delay > 0:
                     wait = self.config.delay * self._jitter(0.8, 1.2)
@@ -203,7 +203,7 @@ class Runner:
             failed = True
         except AuthError as exc:
             self.logger.error("登录态异常：%s", exc)
-            auth_failed = True
+            authFailed = True
         except SteamError as exc:
             self.logger.error("抓取失败：%s", exc)
             failed = True
@@ -211,89 +211,89 @@ class Runner:
             self.logger.exception("未预期错误：%s", exc)
             failed = True
         finally:
-            self._save_state()
+            self._saveState()
 
-        self._write_final_outputs()
+        self._writeFinalOutputs()
 
-        if auth_failed:
+        if authFailed:
             return 3
         if failed:
             return 1
         if (
-            self.config.source == SOURCE_ADMIN
-            and self.total_count
-            and self.next_start < self.total_count
+            self.config.source == sourceAdmin
+            and self.totalCount
+            and self.nextStart < self.totalCount
         ):
             return 4
         return 0
 
-    def _resolve_endpoint(self, candidates: list[str]) -> tuple[str, Page]:
+    def _resolveEndpoint(self, candidates: list[str]) -> tuple[str, Page]:
         errors: list[str] = []
         for url in candidates:
             self.logger.info("尝试接口地址: %s", url)
             try:
-                page = self.source.fetch_page(url, 0, self.config.count)
+                page = self.source.fetchPage(url, 0, self.config.count)
             except AuthError:
                 raise
             except SteamError as exc:
                 self.logger.warning("该地址不可用: %s", exc)
                 errors.append(f"{url} -> {exc}")
                 continue
-            self.logger.info("接口地址可用，total_count=%s", page.total_count)
+            self.logger.info("接口地址可用，total_count=%s", page.totalCount)
             return url, page
         raise SteamError("所有候选接口地址均不可用:\n  " + "\n  ".join(errors))
 
     def _consume(self, page: Page) -> int:
         """Persist every row before deduplicating, then update unique entries."""
-        if page.total_count is not None:
-            self.total_count = page.total_count
-        new_count = 0
+        if page.totalCount is not None:
+            self.totalCount = page.totalCount
+        newCount = 0
         for item in page.recommendations:
-            append_entry(self.out_dir, item)
-            if not item_appid(item):
+            appendEntry(self.outDir, item)
+            if not itemAppid(item):
                 continue
-            key = entry_key(item)
+            key = entryKey(item)
             if key in self.entries:
                 continue
             self.entries[key] = item
-            new_count += 1
+            newCount += 1
 
         self.logger.info(
             "start=%-6d 返回 %2d 条（新增 %2d），累计 %d / %d",
-            page.server_start,
+            page.serverStart,
             len(page.recommendations),
-            new_count,
+            newCount,
             len(self.entries),
-            self.total_count,
+            self.totalCount,
         )
-        return page.server_start
+        return page.serverStart
 
-    def _log_progress(self) -> None:
-        if not self.total_count:
+    def _logProgress(self) -> None:
+        if not self.totalCount:
             self.logger.info("进度：已拉取 %d 条（服务端总数未知）", len(self.entries))
             return
-        percent = min(100.0, self.next_start / self.total_count * 100)
-        elapsed = time.monotonic() - self.run_started_at
-        handled = self.next_start - self.run_start_offset
+        percent = min(100.0, self.nextStart / self.totalCount * 100)
+        elapsed = time.monotonic() - self.runStartedAt
+        handled = self.nextStart - self.runStartOffset
         if handled > 0 and elapsed > 0:
-            remaining = max(0, self.total_count - self.next_start)
+            remaining = max(0, self.totalCount - self.nextStart)
             eta = remaining / (handled / elapsed)
             self.logger.info(
                 "进度：%d/%d（%.1f%%），本轮用时 %s，预计剩余 %s",
-                self.next_start,
-                self.total_count,
+                self.nextStart,
+                self.totalCount,
                 percent,
-                format_duration(elapsed),
-                format_duration(eta),
+                formatDuration(elapsed),
+                formatDuration(eta),
             )
         else:
-            self.logger.info("进度：%d/%d（%.1f%%）", self.next_start, self.total_count, percent)
+            self.logger.info("进度：%d/%d（%.1f%%）", self.nextStart, self.totalCount, percent)
 
     def _snapshot(self) -> None:
         if not self.entries:
             return
-        export_outputs(
-            self.out_dir,
+        exportOutputs(
+            self.outDir,
             self.entries.values(),
             self._meta(),
             self.config.formats,
@@ -302,32 +302,32 @@ class Runner:
     def _meta(self) -> dict[str, Any]:
         return {
             "source": self.config.source,
-            "source_url": self.resolved_url,
-            "clan_id": self.config.clan_id,
-            "total_count": self.total_count,
+            "source_url": self.resolvedUrl,
+            "clan_id": self.config.clanId,
+            "total_count": self.totalCount,
         }
 
-    def _is_complete(self) -> bool:
-        if self.total_count:
-            return self.next_start >= self.total_count
-        return self.empty_seen
+    def _isComplete(self) -> bool:
+        if self.totalCount:
+            return self.nextStart >= self.totalCount
+        return self.emptySeen
 
-    def _save_state(self) -> None:
+    def _saveState(self) -> None:
         self.state.update(
             {
-                "next_start": self.next_start,
-                "total_count": self.total_count,
-                "url": self.resolved_url,
-                "clan_id": self.config.clan_id,
+                "next_start": self.nextStart,
+                "total_count": self.totalCount,
+                "url": self.resolvedUrl,
+                "clan_id": self.config.clanId,
                 "source": self.config.source,
-                "complete": self._is_complete(),
+                "complete": self._isComplete(),
             }
         )
-        save_state(self.out_dir, self.state)
+        saveState(self.outDir, self.state)
 
-    def _write_final_outputs(self) -> None:
-        counts = export_outputs(
-            self.out_dir,
+    def _writeFinalOutputs(self) -> None:
+        counts = exportOutputs(
+            self.outDir,
             self.entries.values(),
             self._meta(),
             self.config.formats,
@@ -339,19 +339,19 @@ class Runner:
                 self.logger.info(
                     "导出 %d 条到 %s",
                     counts.get("json", total),
-                    self.out_dir / "reviews.json",
+                    self.outDir / "reviews.json",
                 )
             elif name == "csv":
                 self.logger.info(
                     "导出 %d 条到 %s",
                     counts.get("csv", total),
-                    self.out_dir / "reviews.csv",
+                    self.outDir / "reviews.csv",
                 )
             elif name == "sqlite":
                 self.logger.info(
                     "导出 %d 条到 %s",
                     counts.get("sqlite", total),
-                    self.out_dir / "reviews.sqlite3",
+                    self.outDir / "reviews.sqlite3",
                 )
         if counts.get("csv_skipped"):
             self.logger.warning(
@@ -359,24 +359,24 @@ class Runner:
                 counts["csv_skipped"],
             )
 
-        pagination_done = self._is_complete()
-        if self.total_count and not pagination_done:
+        paginationDone = self._isComplete()
+        if self.totalCount and not paginationDone:
             self.logger.warning(
                 "尚未抓完：分页 %d/%d，重跑原命令可断点续传",
-                self.next_start,
-                self.total_count,
+                self.nextStart,
+                self.totalCount,
             )
-        elif pagination_done:
-            if self.total_count:
-                self.logger.info("分页已完成：%d/%d", self.next_start, self.total_count)
+        elif paginationDone:
+            if self.totalCount:
+                self.logger.info("分页已完成：%d/%d", self.nextStart, self.totalCount)
             else:
                 self.logger.info("抓取已完成（服务端未提供总数字段）")
-            if self.total_count and total < self.total_count:
+            if self.totalCount and total < self.totalCount:
                 self.logger.info(
                     "本地唯一组评 %d 条，比 total_count 少 %d 条；"
                     "差额来自重复/已删除条目，导出时已按组评身份去重",
                     total,
-                    self.total_count - total,
+                    self.totalCount - total,
                 )
         self.logger.info("-" * 50)
 
@@ -392,36 +392,36 @@ def _text(value: Any) -> str:
     return str(value).strip() if value is not None else ""
 
 
-def print_status(out_dir: Path) -> int:
+def printStatus(outDir: Path) -> int:
     """Read only the output directory and print resume progress."""
-    if not out_dir.exists():
-        print(f"输出目录不存在：{out_dir}")
+    if not outDir.exists():
+        print(f"输出目录不存在：{outDir}")
         return 1
 
-    state = load_state(out_dir)
-    entries = load_existing_entries(out_dir)
-    total_count = _int(state.get("total_count"))
-    next_start = _int(state.get("next_start"))
-    unique_count = len(entries)
+    state = loadState(outDir)
+    entries = loadExistingEntries(outDir)
+    totalCount = _int(state.get("total_count"))
+    nextStart = _int(state.get("next_start"))
+    uniqueCount = len(entries)
 
-    print(f"输出目录：{out_dir}")
-    print(f"唯一组评数：{unique_count} 条（按 游戏+评测者+时间 去重）")
-    if total_count:
-        percent = min(100.0, next_start / total_count * 100)
-        print(f"服务端总数：{total_count}")
-        print(f"抓取进度：{next_start}/{total_count}（{percent:.1f}%）")
+    print(f"输出目录：{outDir}")
+    print(f"唯一组评数：{uniqueCount} 条（按 游戏+评测者+时间 去重）")
+    if totalCount:
+        percent = min(100.0, nextStart / totalCount * 100)
+        print(f"服务端总数：{totalCount}")
+        print(f"抓取进度：{nextStart}/{totalCount}（{percent:.1f}%）")
     else:
         print("服务端总数：未知（尚未成功请求，或 state.json 缺失）")
-        print(f"抓取进度：{next_start}/未知")
-    print(f"分页偏移：next_start={next_start}")
+        print(f"抓取进度：{nextStart}/未知")
+    print(f"分页偏移：next_start={nextStart}")
     print(f"上次更新：{state.get('updated_at', '未知')}")
 
     complete = bool(state.get("complete")) or (
-        bool(total_count) and next_start >= total_count
+        bool(totalCount) and nextStart >= totalCount
     )
     if complete:
         print("状态：已完成（complete）")
-    elif next_start > 0:
+    elif nextStart > 0:
         print("状态：未完成（incomplete），重跑原命令即可断点续传")
     else:
         print("状态：尚未开始（not started）")

@@ -1,4 +1,4 @@
-"""Support ``python -m steam_curator_exporter``."""
+"""Support ``python -m steamCuratorTools``."""
 
 from __future__ import annotations
 

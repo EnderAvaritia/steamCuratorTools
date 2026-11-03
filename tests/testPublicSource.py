@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from conftest import FakeTransport, html_response
-from steam_curator_exporter.sources import PublicSource
+from conftest import FakeTransport, htmlResponse
+from steamCuratorTools.sources import PublicSource
 
-PUBLIC_HTML = """
+publicHtml = """
 <div class="curator_recommendations">
   <a href="/app/10" data-ds-appid="10"><div class="name">Game Ten</div></a>
   <a href="https://store.steampowered.com/app/20?snr=1" data-ds-appid="&quot;20&quot;">
@@ -14,10 +14,10 @@ PUBLIC_HTML = """
 """
 
 
-def test_public_parses_appids_and_best_effort_fields() -> None:
-    transport = FakeTransport(responses=[html_response(PUBLIC_HTML)])
-    source = PublicSource(transport, clan_id="26214428")
-    page = source.fetch_page(
+def testPublicParsesAppidsAndBestEffortFields() -> None:
+    transport = FakeTransport(responses=[htmlResponse(publicHtml)])
+    source = PublicSource(transport, clanId="26214428")
+    page = source.fetchPage(
         "https://store.steampowered.com/curator/26214428-x/ajaxgetfilteredrecommendations/",
         0,
         25,
@@ -32,7 +32,7 @@ def test_public_parses_appids_and_best_effort_fields() -> None:
     assert page.recommendations[0]["recommendation"]["time_recommended"] is None
     assert page.recommendations[0]["recommendation"]["accountid_creator"] is None
     assert page.recommendations[0]["recommendation"]["upvote_count"] == 0
-    assert page.total_count == 0
+    assert page.totalCount == 0
 
     call = transport.calls[0]
     assert call["method"] == "GET"
@@ -50,9 +50,9 @@ def test_public_parses_appids_and_best_effort_fields() -> None:
     assert "Cookie" not in call["headers"]
 
 
-def test_public_empty_page_has_no_recommendations() -> None:
-    transport = FakeTransport(responses=[html_response("<div>nothing here</div>")])
+def testPublicEmptyPageHasNoRecommendations() -> None:
+    transport = FakeTransport(responses=[htmlResponse("<div>nothing here</div>")])
     source = PublicSource(transport)
-    page = source.fetch_page("https://example.test/ajaxgetfilteredrecommendations/", 0, 25)
+    page = source.fetchPage("https://example.test/ajaxgetfilteredrecommendations/", 0, 25)
     assert page.recommendations == []
-    assert page.total_count == 0
+    assert page.totalCount == 0

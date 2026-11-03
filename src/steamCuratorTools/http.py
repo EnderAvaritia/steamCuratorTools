@@ -14,13 +14,13 @@ from urllib.parse import urlsplit
 
 import requests
 
-from .config import DEFAULT_RETRIES, DEFAULT_TIMEOUT
+from .config import defaultRetries, defaultTimeout
 from .errors import AuthError, ConfigError, SteamError
-from .urls import BASE_URL
+from .urls import baseUrl
 
-ALLOWED_PROXY_SCHEMES = ("http", "https", "socks4", "socks5", "socks5h")
+allowedProxySchemes = ("http", "https", "socks4", "socks5", "socks5h")
 
-USER_AGENT = (
+userAgent = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:159.0) "
     "Gecko/20100101 Firefox/159.0"
 )
@@ -35,7 +35,7 @@ class HttpResponse(Protocol):
     def json(self) -> Any: ...
 
 
-def mask_proxy(proxy: str) -> str:
+def maskProxy(proxy: str) -> str:
     """Hide proxy credentials before logging."""
     parts = urlsplit(proxy)
     if parts.username or parts.password:
@@ -45,7 +45,7 @@ def mask_proxy(proxy: str) -> str:
     return proxy
 
 
-def normalize_proxy(value: str) -> str:
+def normalizeProxy(value: str) -> str:
     """Normalize one proxy value, accepting bare ``host:port``."""
     value = value.strip().strip('"').strip("'")
     if not value:
@@ -53,23 +53,23 @@ def normalize_proxy(value: str) -> str:
     if "://" not in value:
         value = "http://" + value
     parts = urlsplit(value)
-    if parts.scheme.lower() not in ALLOWED_PROXY_SCHEMES or not parts.hostname:
+    if parts.scheme.lower() not in allowedProxySchemes or not parts.hostname:
         raise ConfigError(
-            f"无效代理地址: {mask_proxy(value)!r}，"
+            f"无效代理地址: {maskProxy(value)!r}，"
             "应形如 http://127.0.0.1:10279 或 socks5://127.0.0.1:1080"
         )
     return value
 
 
-def _import_socks() -> ModuleType:
+def _importSocks() -> ModuleType:
     """Import seam for PySocks (monkeypatched in tests)."""
     return importlib.import_module("socks")
 
 
-def ensure_socks_support(proxies: list[str]) -> None:
+def ensureSocksSupport(proxies: list[str]) -> None:
     if any(urlsplit(proxy).scheme.lower().startswith("socks") for proxy in proxies):
         try:
-            _import_socks()
+            _importSocks()
         except ImportError as exc:
             raise ConfigError(
                 "检测到 socks 代理，但缺少依赖，请先安装："
@@ -77,18 +77,18 @@ def ensure_socks_support(proxies: list[str]) -> None:
             ) from exc
 
 
-def collect_proxies(
+def collectProxies(
     values: list[str] | None,
-    proxy_file: str | None,
+    proxyFile: str | None,
 ) -> list[str]:
     """Merge CLI proxies and a proxy file, normalizing and deduplicating."""
     raw: list[str] = []
     for value in values or []:
         raw.extend(value.split(","))
 
-    if proxy_file:
+    if proxyFile:
         try:
-            lines = Path(proxy_file).expanduser().read_text(encoding="utf-8").splitlines()
+            lines = Path(proxyFile).expanduser().read_text(encoding="utf-8").splitlines()
         except OSError as exc:
             raise ConfigError(f"读取代理文件失败: {exc}") from exc
         for line in lines:
@@ -98,11 +98,11 @@ def collect_proxies(
 
     proxies: list[str] = []
     for value in raw:
-        normalized = normalize_proxy(value)
+        normalized = normalizeProxy(value)
         if normalized and normalized not in proxies:
             proxies.append(normalized)
 
-    ensure_socks_support(proxies)
+    ensureSocksSupport(proxies)
     return proxies
 
 
@@ -128,12 +128,12 @@ class ProxyPool:
         return proxy
 
 
-def build_session() -> requests.Session:
+def buildSession() -> requests.Session:
     """Create a Firefox-like session with no cookies preloaded."""
     session = requests.Session()
     session.headers.update(
         {
-            "User-Agent": USER_AGENT,
+            "User-Agent": userAgent,
             "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
             "DNT": "1",
         }
@@ -148,27 +148,27 @@ class HttpTransport:
         self,
         session: Any | None = None,
         proxies: list[str] | None = None,
-        timeout: float = DEFAULT_TIMEOUT,
-        retries: int = DEFAULT_RETRIES,
+        timeout: float = defaultTimeout,
+        retries: int = defaultRetries,
         logger: logging.Logger | None = None,
         sleep: Callable[[float], None] | None = None,
         jitter: Callable[[float, float], float] | None = None,
-        base_backoff: float = 3.0,
-        max_backoff: float = 60.0,
+        baseBackoff: float = 3.0,
+        maxBackoff: float = 60.0,
     ) -> None:
-        self.session = session if session is not None else build_session()
-        self.proxy_pool = ProxyPool(proxies)
+        self.session = session if session is not None else buildSession()
+        self.proxyPool = ProxyPool(proxies)
         self.timeout = timeout
         self.retries = retries
-        self.logger = logger or logging.getLogger("steam_curator_exporter")
+        self.logger = logger or logging.getLogger("steamCuratorTools")
         self._sleep = sleep if sleep is not None else time.sleep
         self._jitter = jitter if jitter is not None else random.uniform
-        self.base_backoff = base_backoff
-        self.max_backoff = max_backoff
+        self.baseBackoff = baseBackoff
+        self.maxBackoff = maxBackoff
 
     @property
     def proxies(self) -> tuple[str, ...]:
-        return self.proxy_pool.proxies
+        return self.proxyPool.proxies
 
     def request(
         self,
@@ -180,7 +180,7 @@ class HttpTransport:
         headers: Mapping[str, str] | None = None,
         timeout: float | None = None,
         retries: int | None = None,
-        raise_for_status: bool = True,
+        raiseForStatus: bool = True,
     ) -> HttpResponse:
         """Execute one logical request.
 
@@ -189,19 +189,19 @@ class HttpTransport:
         so callers can inspect JSON error bodies such as ``{"success": 42}``
         instead of retrying blindly.
         """
-        last_error: Exception | None = None
-        effective_timeout = self.timeout if timeout is None else timeout
-        max_attempts = self.retries if retries is None else max(1, retries)
+        lastError: Exception | None = None
+        effectiveTimeout = self.timeout if timeout is None else timeout
+        maxAttempts = self.retries if retries is None else max(1, retries)
 
-        for attempt in range(1, max_attempts + 1):
-            proxy = self.proxy_pool.next()
+        for attempt in range(1, maxAttempts + 1):
+            proxy = self.proxyPool.next()
             if proxy:
                 self.session.proxies = {"http": proxy, "https": proxy}
                 self.logger.debug(
                     "本次使用代理: %s（第 %d/%d 次尝试）",
-                    mask_proxy(proxy),
+                    maskProxy(proxy),
                     attempt,
-                    max_attempts,
+                    maxAttempts,
                 )
             try:
                 specific = getattr(self.session, method.lower(), None)
@@ -211,7 +211,7 @@ class HttpTransport:
                         params=params,
                         data=data,
                         headers=headers,
-                        timeout=effective_timeout,
+                        timeout=effectiveTimeout,
                     )
                 else:
                     response = self.session.request(
@@ -220,11 +220,11 @@ class HttpTransport:
                         params=params,
                         data=data,
                         headers=headers,
-                        timeout=effective_timeout,
+                        timeout=effectiveTimeout,
                     )
             except requests.exceptions.RequestException as exc:
-                last_error = exc
-                self.logger.warning("网络错误（第 %d/%d 次）: %s", attempt, max_attempts, exc)
+                lastError = exc
+                self.logger.warning("网络错误（第 %d/%d 次）: %s", attempt, maxAttempts, exc)
             else:
                 status = int(response.status_code)
                 if status in (401, 403):
@@ -232,29 +232,29 @@ class HttpTransport:
                         f"HTTP {status}：Cookie/sessionid 无效或已过期，"
                         "请重新导出 HAR 或更新 Cookie"
                     )
-                if not raise_for_status:
+                if not raiseForStatus:
                     return response
                 if status == 429:
-                    last_error = SteamError("HTTP 429：请求过于频繁")
-                    self.logger.warning("被限流（第 %d/%d 次），稍后重试", attempt, max_attempts)
+                    lastError = SteamError("HTTP 429：请求过于频繁")
+                    self.logger.warning("被限流（第 %d/%d 次），稍后重试", attempt, maxAttempts)
                 elif status >= 500:
-                    last_error = SteamError(f"HTTP {status}")
+                    lastError = SteamError(f"HTTP {status}")
                     self.logger.warning(
-                        "服务端错误 %s（第 %d/%d 次）", status, attempt, max_attempts
+                        "服务端错误 %s（第 %d/%d 次）", status, attempt, maxAttempts
                     )
                 elif status >= 400:
                     raise SteamError(f"HTTP {status}: {response.reason}")
                 else:
                     return response
 
-            if attempt < max_attempts:
-                backoff = min(self.base_backoff * (2 ** (attempt - 1)), self.max_backoff)
+            if attempt < maxAttempts:
+                backoff = min(self.baseBackoff * (2 ** (attempt - 1)), self.maxBackoff)
                 wait = backoff + self._jitter(0.0, 2.0)
                 self.logger.info("等待 %.1f 秒后重试...", wait)
                 self._sleep(wait)
 
         raise SteamError(f"请求 {url}（start={params.get('start') if params else '?'}）"
-                         f"连续失败 {max_attempts} 次: {last_error}")
+                         f"连续失败 {maxAttempts} 次: {lastError}")
 
     def close(self) -> None:
         close = getattr(self.session, "close", None)
@@ -262,14 +262,14 @@ class HttpTransport:
             close()
 
 
-def default_headers(referer: str, cookie: str | None = None) -> dict[str, str]:
+def defaultHeaders(referer: str, cookie: str | None = None) -> dict[str, str]:
     headers = {
-        "User-Agent": USER_AGENT,
+        "User-Agent": userAgent,
         "Accept": "application/json, text/javascript, */*; q=0.01",
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "X-Requested-With": "XMLHttpRequest",
-        "Origin": BASE_URL,
+        "Origin": baseUrl,
         "Referer": referer,
         "Sec-Fetch-Dest": "empty",
         "Sec-Fetch-Mode": "cors",

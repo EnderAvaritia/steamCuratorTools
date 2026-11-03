@@ -3,8 +3,8 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "steam-curator-exporter"
-version = "0.2.0"
+name = "steam-curator-tools"
+version = "0.3.0"
 description = "Export and delete Steam curator reviews with resume and proxy support"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -31,7 +31,7 @@ dev = [
 ]
 
 [project.scripts]
-steam-curator-exporter = "steam_curator_exporter.cli:main"
+steamCuratorTools = "steamCuratorTools.cli:main"
 
 
 [tool.setuptools]
@@ -43,6 +43,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+python_files = ["test*.py"]
 addopts = "-ra"
 
 [tool.ruff]
@@ -58,4 +59,4 @@ ignore = ["SIM108"]
 "tests/*" = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["steam_curator_exporter", "conftest"]
+known-first-party = ["steamCuratorTools", "conftest"]

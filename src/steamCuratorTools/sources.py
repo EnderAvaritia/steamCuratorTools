@@ -12,10 +12,10 @@ from bs4 import BeautifulSoup
 
 from .config import Config
 from .errors import AuthError, SteamError
-from .http import HttpResponse, HttpTransport, default_headers
-from .urls import BASE_URL, SOURCE_ADMIN, SOURCE_PUBLIC, build_referer
+from .http import HttpResponse, HttpTransport, defaultHeaders
+from .urls import baseUrl, buildReferer, sourceAdmin, sourcePublic
 
-PUBLIC_HEADERS = {
+publicHeaders = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "X-Requested-With": "XMLHttpRequest",
 }
@@ -26,18 +26,18 @@ class Page:
     """One fetched page of recommendations."""
 
     recommendations: list[dict[str, Any]]
-    server_start: int
-    total_count: int | None
+    serverStart: int
+    totalCount: int | None
     raw: Any = None
 
 
 class ReviewSource(Protocol):
     source: str
 
-    def fetch_page(self, url: str, start: int, count: int) -> Page: ...
+    def fetchPage(self, url: str, start: int, count: int) -> Page: ...
 
 
-def _int_or_none(value: Any) -> int | None:
+def _intOrNone(value: Any) -> int | None:
     if value is None or value == "":
         return None
     try:
@@ -49,25 +49,25 @@ def _int_or_none(value: Any) -> int | None:
 class AdminSource:
     """Curator admin AJAX endpoint; requires a logged-in cookie and sessionid."""
 
-    source = SOURCE_ADMIN
+    source = sourceAdmin
 
     def __init__(
         self,
         transport: HttpTransport,
         sessionid: str,
         cookie: str,
-        clan_id: str | None = None,
+        clanId: str | None = None,
         referer: str | None = None,
     ) -> None:
         self.transport = transport
         self.sessionid = sessionid
         self.cookie = cookie
-        self.clan_id = clan_id
+        self.clanId = clanId
         self.referer = referer
 
-    def fetch_page(self, url: str, start: int, count: int) -> Page:
-        referer = self.referer or build_referer(url, self.clan_id, SOURCE_ADMIN)
-        headers = default_headers(referer, self.cookie)
+    def fetchPage(self, url: str, start: int, count: int) -> Page:
+        referer = self.referer or buildReferer(url, self.clanId, sourceAdmin)
+        headers = defaultHeaders(referer, self.cookie)
         params = {"start": str(start), "count": str(count)}
         data = {"sessionid": self.sessionid, "start": str(start), "count": str(count)}
         response = self.transport.request(
@@ -79,13 +79,13 @@ class AdminSource:
         )
         return self._parse(response, start)
 
-    def _parse(self, response: HttpResponse, requested_start: int) -> Page:
-        content_type = str(response.headers.get("content-type", ""))
-        if "json" not in content_type.lower():
+    def _parse(self, response: HttpResponse, requestedStart: int) -> Page:
+        contentType = str(response.headers.get("content-type", ""))
+        if "json" not in contentType.lower():
             snippet = response.text[:200].replace("\n", " ")
             raise AuthError(
                 "接口返回的不是 JSON（大概率登录态失效或 Cookie 已过期，被重定向到登录页）。"
-                f"content-type={content_type!r}, body 开头={snippet!r}"
+                f"content-type={contentType!r}, body 开头={snippet!r}"
             )
         try:
             payload = response.json()
@@ -96,40 +96,40 @@ class AdminSource:
             raise SteamError(f"响应结构异常: {type(payload).__name__}")
         if payload.get("success") != 1:
             raise AuthError(
-                f"接口 success != 1（start={requested_start}）："
+                f"接口 success != 1（start={requestedStart}）："
                 f"{json.dumps(payload, ensure_ascii=False)[:300]}"
             )
-        raw_recommendations = payload.get("recommendations")
-        if raw_recommendations is None:
+        rawRecommendations = payload.get("recommendations")
+        if rawRecommendations is None:
             raise SteamError(
                 "响应缺少 recommendations 字段: "
                 f"{json.dumps(payload, ensure_ascii=False)[:300]}"
             )
-        if not isinstance(raw_recommendations, list):
+        if not isinstance(rawRecommendations, list):
             raise SteamError(
-                f"响应 recommendations 不是数组: {type(raw_recommendations).__name__}"
+                f"响应 recommendations 不是数组: {type(rawRecommendations).__name__}"
             )
-        recommendations = [item for item in raw_recommendations if isinstance(item, dict)]
-        server_start = _int_or_none(payload.get("start"))
-        if server_start is None:
-            server_start = requested_start
-        total_count = _int_or_none(payload.get("total_count"))
+        recommendations = [item for item in rawRecommendations if isinstance(item, dict)]
+        serverStart = _intOrNone(payload.get("start"))
+        if serverStart is None:
+            serverStart = requestedStart
+        totalCount = _intOrNone(payload.get("total_count"))
         return Page(
             recommendations=recommendations,
-            server_start=server_start,
-            total_count=total_count,
+            serverStart=serverStart,
+            totalCount=totalCount,
             raw=payload,
         )
 
 
-def _appid_from_anchor(anchor: Any) -> str:
+def _appidFromAnchor(anchor: Any) -> str:
     raw = anchor.get("data-ds-appid", "")
     # Some payloads contain escaped quotes (\"123\") or HTML entities ("123").
     text = str(raw).strip().strip("\"'\\").strip()
     return text if text.isdigit() else ""
 
 
-def _app_name_from_anchor(anchor: Any) -> str:
+def _appNameFromAnchor(anchor: Any) -> str:
     text = anchor.get_text(" ", strip=True)
     if text:
         return text
@@ -147,14 +147,14 @@ def _app_name_from_anchor(anchor: Any) -> str:
 class PublicSource:
     """Public curator page; no authentication, limited fields, HTML parsing."""
 
-    source = SOURCE_PUBLIC
+    source = sourcePublic
 
-    def __init__(self, transport: HttpTransport, clan_id: str | None = None) -> None:
+    def __init__(self, transport: HttpTransport, clanId: str | None = None) -> None:
         self.transport = transport
-        self.clan_id = clan_id
+        self.clanId = clanId
 
-    def fetch_page(self, url: str, start: int, count: int) -> Page:
-        referer = build_referer(url, self.clan_id, SOURCE_PUBLIC)
+    def fetchPage(self, url: str, start: int, count: int) -> Page:
+        referer = buildReferer(url, self.clanId, sourcePublic)
         headers = {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:159.0) "
@@ -163,7 +163,7 @@ class PublicSource:
             "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
             "Referer": referer,
             "DNT": "1",
-            **PUBLIC_HEADERS,
+            **publicHeaders,
         }
         params = {
             "query": "",
@@ -179,15 +179,15 @@ class PublicSource:
         response = self.transport.request("GET", url, params=params, headers=headers)
         return self._parse(response.text, start)
 
-    def _parse(self, html: str, requested_start: int) -> Page:
+    def _parse(self, html: str, requestedStart: int) -> Page:
         soup = BeautifulSoup(html, "html.parser")
         recommendations: list[dict[str, Any]] = []
         for anchor in soup.select("a[data-ds-appid]"):
-            appid = _appid_from_anchor(anchor)
+            appid = _appidFromAnchor(anchor)
             if not appid:
                 continue
-            name = _app_name_from_anchor(anchor)
-            href = urljoin(BASE_URL, str(anchor.get("href") or ""))
+            name = _appNameFromAnchor(anchor)
+            href = urljoin(baseUrl, str(anchor.get("href") or ""))
             recommendations.append(
                 {
                     "appid": int(appid),
@@ -209,29 +209,29 @@ class PublicSource:
             )
         return Page(
             recommendations=recommendations,
-            server_start=requested_start,
-            total_count=0,
+            serverStart=requestedStart,
+            totalCount=0,
             raw=html,
         )
 
 
-def build_source(config: Config, transport: HttpTransport, sessionid: str | None) -> ReviewSource:
-    if config.source == SOURCE_PUBLIC:
-        return PublicSource(transport, config.clan_id)
+def buildSource(config: Config, transport: HttpTransport, sessionid: str | None) -> ReviewSource:
+    if config.source == sourcePublic:
+        return PublicSource(transport, config.clanId)
     if not sessionid:
         raise SteamError("admin 数据源需要 sessionid")
     return AdminSource(
         transport,
         sessionid,
         config.cookie or "",
-        config.clan_id,
+        config.clanId,
         config.referer,
     )
 
 
-def page_meta(page: Page) -> Mapping[str, Any]:
+def pageMeta(page: Page) -> Mapping[str, Any]:
     return {
-        "server_start": page.server_start,
+        "server_start": page.serverStart,
         "returned": len(page.recommendations),
-        "total_count": page.total_count,
+        "total_count": page.totalCount,
     }

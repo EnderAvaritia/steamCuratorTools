@@ -9,10 +9,10 @@ from typing import Any
 from urllib.parse import parse_qs
 
 from .errors import ConfigError
-from .urls import SOURCE_PUBLIC, extract_sessionid
+from .urls import extractSessionid, sourcePublic
 
-ENDPOINT_RECOMMENDATIONS = "recommendations"
-ENDPOINT_DELETE = "delete"
+endpointRecommendations = "recommendations"
+endpointDelete = "delete"
 
 
 @dataclass(slots=True)
@@ -23,7 +23,7 @@ class HarInfo:
     referer: str | None = None
 
 
-def _headers_by_name(request: dict[str, Any]) -> dict[str, str]:
+def _headersByName(request: dict[str, Any]) -> dict[str, str]:
     headers: dict[str, str] = {}
     for header in request.get("headers", []) or []:
         if not isinstance(header, dict):
@@ -34,15 +34,15 @@ def _headers_by_name(request: dict[str, Any]) -> dict[str, str]:
     return headers
 
 
-def _sessionid_from_post_data(post_data: Any) -> str | None:
-    if not isinstance(post_data, dict):
+def _sessionidFromPostData(postData: Any) -> str | None:
+    if not isinstance(postData, dict):
         return None
-    for param in post_data.get("params", []) or []:
+    for param in postData.get("params", []) or []:
         if isinstance(param, dict) and param.get("name") == "sessionid":
             value = str(param.get("value") or "").strip()
             if value:
                 return value
-    text = post_data.get("text")
+    text = postData.get("text")
     if isinstance(text, str) and text:
         values = parse_qs(text).get("sessionid")
         if values:
@@ -52,7 +52,7 @@ def _sessionid_from_post_data(post_data: Any) -> str | None:
     return None
 
 
-def _sessionid_from_query(request: dict[str, Any]) -> str | None:
+def _sessionidFromQuery(request: dict[str, Any]) -> str | None:
     for param in request.get("queryString", []) or []:
         if isinstance(param, dict) and param.get("name") == "sessionid":
             value = str(param.get("value") or "").strip()
@@ -61,26 +61,26 @@ def _sessionid_from_query(request: dict[str, Any]) -> str | None:
     return None
 
 
-def _is_admin_entry(entry: dict[str, Any]) -> bool:
+def _isAdminEntry(entry: dict[str, Any]) -> bool:
     url = str((entry.get("request") or {}).get("url", ""))
     return "/admin/ajaxgetrecommendations" in url
 
 
-def _is_delete_entry(entry: dict[str, Any]) -> bool:
+def _isDeleteEntry(entry: dict[str, Any]) -> bool:
     url = str((entry.get("request") or {}).get("url", ""))
     return "/admin/ajaxdeletereview" in url
 
 
-def _is_public_entry(entry: dict[str, Any]) -> bool:
+def _isPublicEntry(entry: dict[str, Any]) -> bool:
     url = str((entry.get("request") or {}).get("url", ""))
     return "ajaxgetfilteredrecommendations" in url and "/admin/" not in url
 
 
-def load_har(
+def loadHar(
     path: Path,
     source: str | None = None,
     *,
-    endpoint: str = ENDPOINT_RECOMMENDATIONS,
+    endpoint: str = endpointRecommendations,
 ) -> HarInfo:
     """Read a browser HAR and return the best matching curator request.
 
@@ -99,16 +99,16 @@ def load_har(
     entries = raw["log"].get("entries") or []
     if not isinstance(entries, list):
         raise ConfigError("HAR 结构异常：log.entries 不是数组")
-    admin_entries = [entry for entry in entries if _is_admin_entry(entry)]
-    delete_entries = [entry for entry in entries if _is_delete_entry(entry)]
-    public_entries = [entry for entry in entries if _is_public_entry(entry)]
+    adminEntries = [entry for entry in entries if _isAdminEntry(entry)]
+    deleteEntries = [entry for entry in entries if _isDeleteEntry(entry)]
+    publicEntries = [entry for entry in entries if _isPublicEntry(entry)]
 
-    if endpoint == ENDPOINT_DELETE:
-        selected = delete_entries or admin_entries or public_entries
-    elif source == SOURCE_PUBLIC:
-        selected = public_entries or admin_entries or delete_entries
+    if endpoint == endpointDelete:
+        selected = deleteEntries or adminEntries or publicEntries
+    elif source == sourcePublic:
+        selected = publicEntries or adminEntries or deleteEntries
     else:
-        selected = admin_entries or delete_entries or public_entries
+        selected = adminEntries or deleteEntries or publicEntries
 
     if not selected:
         raise ConfigError(
@@ -117,14 +117,14 @@ def load_har(
         )
 
     request = selected[-1].get("request") or {}
-    headers = _headers_by_name(request)
+    headers = _headersByName(request)
     cookie = headers.get("cookie") or None
     referer = headers.get("referer") or None
-    sessionid = _sessionid_from_post_data(request.get("postData"))
+    sessionid = _sessionidFromPostData(request.get("postData"))
     if not sessionid:
-        sessionid = _sessionid_from_query(request)
+        sessionid = _sessionidFromQuery(request)
     if not sessionid:
-        sessionid = extract_sessionid(cookie or "")
+        sessionid = extractSessionid(cookie or "")
 
     return HarInfo(
         url=request.get("url") or None,

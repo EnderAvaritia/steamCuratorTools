@@ -9,11 +9,11 @@ from typing import Any
 
 import pytest
 
-from steam_curator_exporter.config import Config
+from steamCuratorTools.config import Config
 
-FIXTURES = Path(__file__).parent / "fixtures"
-ADMIN_HAR = FIXTURES / "admin.har"
-PUBLIC_HAR = FIXTURES / "public.har"
+fixtures = Path(__file__).parent / "fixtures"
+adminHar = fixtures / "admin.har"
+publicHar = fixtures / "public.har"
 
 
 @dataclass
@@ -32,7 +32,7 @@ class FakeResponse:
         return json.loads(self.text)
 
 
-def json_response(payload: dict[str, Any], status: int = 200) -> FakeResponse:
+def jsonResponse(payload: dict[str, Any], status: int = 200) -> FakeResponse:
     return FakeResponse(
         status_code=status,
         headers={"content-type": "application/json; charset=utf-8"},
@@ -41,7 +41,7 @@ def json_response(payload: dict[str, Any], status: int = 200) -> FakeResponse:
     )
 
 
-def html_response(text: str, status: int = 200) -> FakeResponse:
+def htmlResponse(text: str, status: int = 200) -> FakeResponse:
     return FakeResponse(
         status_code=status,
         headers={"content-type": "text/html; charset=utf-8"},
@@ -50,7 +50,7 @@ def html_response(text: str, status: int = 200) -> FakeResponse:
     )
 
 
-def admin_response(
+def adminResponse(
     items: list[dict[str, Any]],
     total: int | None,
     start: int | None = None,
@@ -63,13 +63,13 @@ def admin_response(
         payload["total_count"] = total
     if start is not None:
         payload["start"] = start
-    return json_response(payload)
+    return jsonResponse(payload)
 
 
-def make_item(
+def makeItem(
     appid: int = 10,
     creator: int | None = 100,
-    time_recommended: int | None = 1_700_000_000,
+    timeRecommended: int | None = 1_700_000_000,
     name: str = "Test Game",
     blurb: str = "blurb",
     link: str | None = None,
@@ -80,7 +80,7 @@ def make_item(
         "link_url": link if link is not None else f"https://steamcommunity.com/id/user/recommended/{appid}",
         "link_text": "",
         "blurb": blurb,
-        "time_recommended": time_recommended,
+        "time_recommended": timeRecommended,
         "comment_count": 0,
         "upvote_count": 0,
         "accountid_creator": creator,
@@ -113,7 +113,7 @@ class FakeTransport:
         headers: Mapping[str, str] | None = None,
         timeout: float | None = None,
         retries: int | None = None,
-        raise_for_status: bool = True,
+        raiseForStatus: bool = True,
     ) -> FakeResponse:
         call = {
             "method": method,
@@ -123,7 +123,7 @@ class FakeTransport:
             "headers": dict(headers or {}),
             "timeout": timeout,
             "retries": retries,
-            "raise_for_status": raise_for_status,
+            "raise_for_status": raiseForStatus,
         }
         self.calls.append(call)
         if self.handler is not None:
@@ -138,9 +138,9 @@ class FakeTransport:
         return None
 
 
-def make_config(tmp_path: Path, **overrides: Any) -> Config:
+def makeConfig(tmp_path: Path, **overrides: Any) -> Config:
     base = {
-        "clan_id": "26214428",
+        "clanId": "26214428",
         "name": "测试组",
         "url": "https://store.steampowered.com/curator/26214428-TEST/admin/ajaxgetrecommendations/",
         "source": "admin",
@@ -151,11 +151,11 @@ def make_config(tmp_path: Path, **overrides: Any) -> Config:
         "delay": 0.0,
         "timeout": 1.0,
         "retries": 1,
-        "max_pages": 100,
+        "maxPages": 100,
         "formats": ["json", "csv"],
         "fresh": False,
-        "keep_raw": False,
-        "log_level": "INFO",
+        "keepRaw": False,
+        "logLevel": "INFO",
     }
     base.update(overrides)
     return Config(**base)
@@ -163,7 +163,7 @@ def make_config(tmp_path: Path, **overrides: Any) -> Config:
 
 @pytest.fixture
 def logger() -> logging.Logger:
-    log = logging.getLogger(f"test.steam_curator_exporter.{id(object())}")
+    log = logging.getLogger(f"test.steamCuratorTools.{id(object())}")
     log.setLevel(logging.DEBUG)
     log.propagate = False
     for handler in list(log.handlers):

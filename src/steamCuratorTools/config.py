@@ -11,22 +11,22 @@ from pathlib import Path
 from typing import Any
 
 from .errors import ConfigError
-from .urls import SOURCE_ADMIN, SOURCE_PUBLIC
+from .urls import sourceAdmin, sourcePublic
 
-DEFAULT_OUT = "curator_reviews"
-DEFAULT_PAGE_SIZE = 25
-DEFAULT_DELAY = 1.5
-DEFAULT_TIMEOUT = 30.0
-DEFAULT_RETRIES = 5
-DEFAULT_MAX_PAGES = 5000
-DEFAULT_FORMATS = ("json", "csv")
-DEFAULT_LOG_LEVEL = "INFO"
+defaultOut = "curator_reviews"
+defaultPageSize = 25
+defaultDelay = 1.5
+defaultTimeout = 30.0
+defaultRetries = 5
+defaultMaxPages = 5000
+defaultFormats = ("json", "csv")
+defaultLogLevel = "INFO"
 
-ALLOWED_FORMATS = ("json", "csv", "sqlite")
-ALLOWED_SOURCES = (SOURCE_ADMIN, SOURCE_PUBLIC)
-ALLOWED_LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+allowedFormats = ("json", "csv", "sqlite")
+allowedSources = (sourceAdmin, sourcePublic)
+allowedLogLevels = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
-CONFIG_KEYS = frozenset(
+configKeys = frozenset(
     {
         "clan_id",
         "name",
@@ -53,40 +53,40 @@ CONFIG_KEYS = frozenset(
 
 @dataclass(slots=True)
 class Config:
-    clan_id: str | None = None
+    clanId: str | None = None
     name: str = ""
     url: str | None = None
-    source: str = SOURCE_ADMIN
+    source: str = sourceAdmin
     cookie: str | None = None
     sessionid: str | None = None
     referer: str | None = None
     proxy: list[str] = field(default_factory=list)
-    proxy_file: str | None = None
-    out: str = DEFAULT_OUT
-    count: int = DEFAULT_PAGE_SIZE
-    delay: float = DEFAULT_DELAY
-    timeout: float = DEFAULT_TIMEOUT
-    retries: int = DEFAULT_RETRIES
-    max_pages: int = DEFAULT_MAX_PAGES
-    formats: list[str] = field(default_factory=lambda: list(DEFAULT_FORMATS))
+    proxyFile: str | None = None
+    out: str = defaultOut
+    count: int = defaultPageSize
+    delay: float = defaultDelay
+    timeout: float = defaultTimeout
+    retries: int = defaultRetries
+    maxPages: int = defaultMaxPages
+    formats: list[str] = field(default_factory=lambda: list(defaultFormats))
     fresh: bool = False
-    keep_raw: bool = False
-    log_level: str = DEFAULT_LOG_LEVEL
+    keepRaw: bool = False
+    logLevel: str = defaultLogLevel
     resume: bool = False
 
 
-def _expect_type(key: str, value: Any, expected: type | tuple[type, ...]) -> None:
-    if isinstance(value, bool) and expected is not bool and bool not in _as_tuple(expected):
+def _expectType(key: str, value: Any, expected: type | tuple[type, ...]) -> None:
+    if isinstance(value, bool) and expected is not bool and bool not in _asTuple(expected):
         raise ConfigError(f"配置项 {key} 类型不正确: 期望 {expected}, 实际 bool")
     if not isinstance(value, expected):
         raise ConfigError(f"配置项 {key} 类型不正确: 期望 {expected}, 实际 {type(value).__name__}")
 
 
-def _as_tuple(expected: type | tuple[type, ...]) -> tuple[type, ...]:
+def _asTuple(expected: type | tuple[type, ...]) -> tuple[type, ...]:
     return expected if isinstance(expected, tuple) else (expected,)
 
 
-def _string_list(key: str, value: Any) -> list[str]:
+def _stringList(key: str, value: Any) -> list[str]:
     if isinstance(value, str):
         return [part.strip() for part in value.split(",") if part.strip()]
     if isinstance(value, list) and all(isinstance(item, str) for item in value):
@@ -94,7 +94,7 @@ def _string_list(key: str, value: Any) -> list[str]:
     raise ConfigError(f"配置项 {key} 应为字符串列表（或逗号分隔字符串）")
 
 
-def load_config_file(path: Path) -> dict[str, Any]:
+def loadConfigFile(path: Path) -> dict[str, Any]:
     """Load a TOML config file and validate its shape."""
     try:
         text = path.read_text(encoding="utf-8")
@@ -107,37 +107,37 @@ def load_config_file(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ConfigError("配置文件顶层必须是 TOML 表")
 
-    unknown = sorted(set(data) - CONFIG_KEYS)
+    unknown = sorted(set(data) - configKeys)
     if unknown:
         raise ConfigError(f"配置文件包含未知配置项: {', '.join(unknown)}")
 
     normalized: dict[str, Any] = {}
     for key, value in data.items():
         if key == "clan_id":
-            _expect_type(key, value, (str, int))
+            _expectType(key, value, (str, int))
             normalized[key] = str(value).strip()
         elif key in {"name", "url", "source", "cookie", "cookie_file", "sessionid",
                      "proxy_file", "out", "log_level"}:
-            _expect_type(key, value, str)
+            _expectType(key, value, str)
             normalized[key] = value
         elif key in {"proxy", "formats"}:
-            normalized[key] = _string_list(key, value)
+            normalized[key] = _stringList(key, value)
         elif key == "count" or key in {"retries", "max_pages"}:
-            _expect_type(key, value, int)
+            _expectType(key, value, int)
             normalized[key] = value
         elif key in {"delay", "timeout"}:
-            _expect_type(key, value, (int, float))
+            _expectType(key, value, (int, float))
             normalized[key] = float(value)
         elif key in {"fresh", "keep_raw"}:
-            _expect_type(key, value, bool)
+            _expectType(key, value, bool)
             normalized[key] = value
     return normalized
 
 
-def parse_formats(values: list[str] | str | None) -> list[str]:
+def parseFormats(values: list[str] | str | None) -> list[str]:
     """Parse repeated/comma-separated format flags, preserving order."""
     if not values:
-        return list(DEFAULT_FORMATS)
+        return list(defaultFormats)
     if isinstance(values, str):
         values = [values]
     formats: list[str] = []
@@ -146,9 +146,9 @@ def parse_formats(values: list[str] | str | None) -> list[str]:
             name = part.strip().lower()
             if not name:
                 continue
-            if name not in ALLOWED_FORMATS:
+            if name not in allowedFormats:
                 raise ConfigError(
-                    f"无效导出格式: {name!r}，可选值: {', '.join(ALLOWED_FORMATS)}"
+                    f"无效导出格式: {name!r}，可选值: {', '.join(allowedFormats)}"
                 )
             if name not in formats:
                 formats.append(name)
@@ -157,59 +157,59 @@ def parse_formats(values: list[str] | str | None) -> list[str]:
     return formats
 
 
-def _pick(cli: Mapping[str, Any], file_data: Mapping[str, Any], key: str,
+def _pick(cli: Mapping[str, Any], fileData: Mapping[str, Any], key: str,
           default: Any) -> Any:
     value = cli.get(key)
     if value is not None:
         return value
-    if key in file_data:
-        return file_data[key]
+    if key in fileData:
+        return fileData[key]
     return default
 
 
-def merge_config(cli: Mapping[str, Any], file_data: Mapping[str, Any]) -> Config:
+def mergeConfig(cli: Mapping[str, Any], fileData: Mapping[str, Any]) -> Config:
     """Merge CLI values over TOML values over defaults.
 
     ``cli`` values must be ``None`` when the user did not pass the option.
     """
-    proxy_values = _pick(cli, file_data, "proxy", [])
-    if isinstance(proxy_values, str):
-        proxy_values = _string_list("proxy", proxy_values)
+    proxyValues = _pick(cli, fileData, "proxy", [])
+    if isinstance(proxyValues, str):
+        proxyValues = _stringList("proxy", proxyValues)
     config = Config(
-        clan_id=_pick(cli, file_data, "clan_id", None),
-        name=_pick(cli, file_data, "name", ""),
-        url=_pick(cli, file_data, "url", None),
-        source=_pick(cli, file_data, "source", SOURCE_ADMIN),
+        clanId=_pick(cli, fileData, "clan_id", None),
+        name=_pick(cli, fileData, "name", ""),
+        url=_pick(cli, fileData, "url", None),
+        source=_pick(cli, fileData, "source", sourceAdmin),
         cookie=None,
-        sessionid=_pick(cli, file_data, "sessionid", None),
-        proxy=list(proxy_values or []),
-        proxy_file=_pick(cli, file_data, "proxy_file", None),
-        out=_pick(cli, file_data, "out", DEFAULT_OUT),
-        count=_pick(cli, file_data, "count", DEFAULT_PAGE_SIZE),
-        delay=_pick(cli, file_data, "delay", DEFAULT_DELAY),
-        timeout=_pick(cli, file_data, "timeout", DEFAULT_TIMEOUT),
-        retries=_pick(cli, file_data, "retries", DEFAULT_RETRIES),
-        max_pages=_pick(cli, file_data, "max_pages", DEFAULT_MAX_PAGES),
-        formats=parse_formats(_pick(cli, file_data, "formats", None)),
-        fresh=bool(_pick(cli, file_data, "fresh", False)),
-        keep_raw=bool(_pick(cli, file_data, "keep_raw", False)),
-        log_level=str(_pick(cli, file_data, "log_level", DEFAULT_LOG_LEVEL)).upper(),
+        sessionid=_pick(cli, fileData, "sessionid", None),
+        proxy=list(proxyValues or []),
+        proxyFile=_pick(cli, fileData, "proxy_file", None),
+        out=_pick(cli, fileData, "out", defaultOut),
+        count=_pick(cli, fileData, "count", defaultPageSize),
+        delay=_pick(cli, fileData, "delay", defaultDelay),
+        timeout=_pick(cli, fileData, "timeout", defaultTimeout),
+        retries=_pick(cli, fileData, "retries", defaultRetries),
+        maxPages=_pick(cli, fileData, "max_pages", defaultMaxPages),
+        formats=parseFormats(_pick(cli, fileData, "formats", None)),
+        fresh=bool(_pick(cli, fileData, "fresh", False)),
+        keepRaw=bool(_pick(cli, fileData, "keep_raw", False)),
+        logLevel=str(_pick(cli, fileData, "log_level", defaultLogLevel)).upper(),
         resume=bool(cli.get("resume", False)),
     )
-    if config.clan_id is not None:
-        config.clan_id = str(config.clan_id).strip() or None
-    if config.source not in ALLOWED_SOURCES:
+    if config.clanId is not None:
+        config.clanId = str(config.clanId).strip() or None
+    if config.source not in allowedSources:
         raise ConfigError(f"无效数据源: {config.source!r}，可选值: admin, public")
-    validate_config(config)
+    validateConfig(config)
     return config
 
 
-def validate_config(config: Config) -> None:
+def validateConfig(config: Config) -> None:
     if config.count < 1:
         raise ConfigError("--count 必须 >= 1")
     if config.retries < 1:
         raise ConfigError("--retries 必须 >= 1")
-    if config.max_pages < 1:
+    if config.maxPages < 1:
         raise ConfigError("--max-pages 必须 >= 1")
     if config.delay < 0:
         raise ConfigError("--delay 不能为负数")
@@ -217,13 +217,13 @@ def validate_config(config: Config) -> None:
         raise ConfigError("--timeout 必须大于 0")
     if not config.out.strip():
         raise ConfigError("--out 不能为空")
-    if config.log_level not in ALLOWED_LOG_LEVELS:
+    if config.logLevel not in allowedLogLevels:
         raise ConfigError(
-            f"无效日志级别: {config.log_level!r}，可选值: {', '.join(ALLOWED_LOG_LEVELS)}"
+            f"无效日志级别: {config.logLevel!r}，可选值: {', '.join(allowedLogLevels)}"
         )
 
 
-def _read_cookie_file(path: str | None) -> str | None:
+def _readCookieFile(path: str | None) -> str | None:
     if not path:
         return None
     try:
@@ -233,61 +233,61 @@ def _read_cookie_file(path: str | None) -> str | None:
     return text or None
 
 
-def resolve_cookie(
-    cli_cookie: str | None,
-    cli_cookie_file: str | None,
-    file_data: Mapping[str, Any],
-    har_cookie: str | None,
+def resolveCookie(
+    cliCookie: str | None,
+    cliCookieFile: str | None,
+    fileData: Mapping[str, Any],
+    harCookie: str | None,
     environ: Mapping[str, str] | None = None,
 ) -> str:
     """Resolve a cookie using the documented precedence order."""
     env = os.environ if environ is None else environ
-    if isinstance(cli_cookie, str) and cli_cookie.strip():
-        return cli_cookie.strip()
-    cli_file_cookie = _read_cookie_file(cli_cookie_file)
-    if cli_file_cookie:
-        return cli_file_cookie
-    config_cookie = file_data.get("cookie")
-    if isinstance(config_cookie, str) and config_cookie.strip():
-        return config_cookie.strip()
-    config_file_cookie = _read_cookie_file(file_data.get("cookie_file"))
-    if config_file_cookie:
-        return config_file_cookie
-    if isinstance(har_cookie, str) and har_cookie.strip():
-        return har_cookie.strip()
-    env_cookie = env.get("STEAM_COOKIE")
-    if isinstance(env_cookie, str) and env_cookie.strip():
-        return env_cookie.strip()
+    if isinstance(cliCookie, str) and cliCookie.strip():
+        return cliCookie.strip()
+    cliFileCookie = _readCookieFile(cliCookieFile)
+    if cliFileCookie:
+        return cliFileCookie
+    configCookie = fileData.get("cookie")
+    if isinstance(configCookie, str) and configCookie.strip():
+        return configCookie.strip()
+    configFileCookie = _readCookieFile(fileData.get("cookie_file"))
+    if configFileCookie:
+        return configFileCookie
+    if isinstance(harCookie, str) and harCookie.strip():
+        return harCookie.strip()
+    envCookie = env.get("STEAM_COOKIE")
+    if isinstance(envCookie, str) and envCookie.strip():
+        return envCookie.strip()
     return ""
 
 
-def resolve_sessionid(
-    merged_sessionid: str | None,
-    har_sessionid: str | None,
+def resolveSessionid(
+    mergedSessionid: str | None,
+    harSessionid: str | None,
     cookie: str,
     environ: Mapping[str, str] | None = None,
 ) -> str | None:
     """Resolve sessionid, falling back to env and then the cookie value."""
     env = os.environ if environ is None else environ
     values = [
-        merged_sessionid,
-        har_sessionid,
+        mergedSessionid,
+        harSessionid,
         env.get("STEAM_SESSIONID"),
     ]
     for value in values:
         if isinstance(value, str) and value.strip():
             return value.strip()
-    from .urls import extract_sessionid
+    from .urls import extractSessionid
 
-    return extract_sessionid(cookie)
+    return extractSessionid(cookie)
 
 
-def describe_config(config: Config) -> list[str]:
+def describeConfig(config: Config) -> list[str]:
     """Human-readable, secret-free description used by ``--dry-run``."""
     lines = [
         f"输出目录：{Path(config.out).expanduser().resolve()}",
         f"数据源：{config.source}",
-        f"组 ID：{config.clan_id or '(未知)'}",
+        f"组 ID：{config.clanId or '(未知)'}",
         f"组名称：{config.name or '(未提供)'}",
         f"接口 URL：{config.url or '(自动探测)'}",
         f"Cookie：{f'已提供（长度 {len(config.cookie)} 字符）' if config.cookie else '未提供'}",
@@ -296,21 +296,21 @@ def describe_config(config: Config) -> list[str]:
         f"页间隔：{config.delay}s",
         f"超时：{config.timeout}s",
         f"重试：{config.retries}",
-        f"最大页数：{config.max_pages}",
+        f"最大页数：{config.maxPages}",
         f"导出格式：{', '.join(config.formats)}",
-        f"保留原始响应：{'是' if config.keep_raw else '否'}",
+        f"保留原始响应：{'是' if config.keepRaw else '否'}",
         f"清空重来：{'是' if config.fresh else '否'}",
-        f"日志级别：{config.log_level}",
+        f"日志级别：{config.logLevel}",
     ]
     if config.proxy:
-        from .http import mask_proxy
+        from .http import maskProxy
 
-        masked = ", ".join(mask_proxy(proxy) for proxy in config.proxy)
+        masked = ", ".join(maskProxy(proxy) for proxy in config.proxy)
         lines.append(f"代理：{len(config.proxy)} 个 -> {masked}")
     else:
         lines.append("代理：未指定（使用 HTTP_PROXY/HTTPS_PROXY 环境变量或直连）")
     return lines
 
 
-def logging_level(name: str) -> int:
+def loggingLevel(name: str) -> int:
     return logging.getLevelNamesMapping().get(name.upper(), logging.INFO)

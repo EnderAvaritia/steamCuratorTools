@@ -1,12 +1,12 @@
-"""Steam curator review exporter."""
+"""Steam curator review exporter and deleter."""
 
 from __future__ import annotations
 
 from .config import Config
 from .errors import AuthError, ConfigError, SteamError, UsageError
-from .models import Review, entry_key, local_iso, steamid64
+from .models import Review, entryKey, localIso, steamid64
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "__version__",
@@ -16,7 +16,7 @@ __all__ = [
     "Review",
     "SteamError",
     "UsageError",
-    "entry_key",
-    "local_iso",
+    "entryKey",
+    "localIso",
     "steamid64",
 ]

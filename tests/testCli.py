@@ -6,18 +6,18 @@ from typing import Any
 
 import pytest
 
-import steam_curator_exporter.cli as cli
-from conftest import ADMIN_HAR, FakeTransport, admin_response, html_response, make_item
-from steam_curator_exporter.storage import append_entry, save_state
+import steamCuratorTools.cli as cli
+from conftest import FakeTransport, adminHar, adminResponse, htmlResponse, makeItem
+from steamCuratorTools.storage import appendEntry, saveState
 
-EXPLICIT_ADMIN_URL = (
+explicitAdminUrl = (
     "https://store.steampowered.com/curator/26214428-TEST/admin/ajaxgetrecommendations/"
 )
 
 
-def test_cli_admin_dry_run_with_synthetic_har(tmp_path: Path, capsys) -> None:
+def testCliAdminDryRunWithSyntheticHar(tmp_path: Path, capsys) -> None:
     out = tmp_path / "dry"
-    code = cli.main(["--har", str(ADMIN_HAR), "--out", str(out), "--dry-run"])
+    code = cli.main(["--har", str(adminHar), "--out", str(out), "--dry-run"])
     assert code == 0
     printed = capsys.readouterr().out
     assert "dry-run" in printed
@@ -26,7 +26,7 @@ def test_cli_admin_dry_run_with_synthetic_har(tmp_path: Path, capsys) -> None:
     assert (out / "run.log").exists()
 
 
-def test_cli_public_dry_run_needs_no_cookie(tmp_path: Path) -> None:
+def testCliPublicDryRunNeedsNoCookie(tmp_path: Path) -> None:
     code = cli.main(
         [
             "--source",
@@ -43,35 +43,35 @@ def test_cli_public_dry_run_needs_no_cookie(tmp_path: Path) -> None:
     assert code == 0
 
 
-def test_cli_admin_without_cookie_is_usage_error(tmp_path: Path, capsys) -> None:
+def testCliAdminWithoutCookieIsUsageError(tmp_path: Path, capsys) -> None:
     code = cli.main(["--clan-id", "26214428", "--out", str(tmp_path / "nocookie")])
     assert code == 2
     assert "缺少 Cookie" in capsys.readouterr().err
 
 
-def test_cli_status_missing_directory(tmp_path: Path, capsys) -> None:
+def testCliStatusMissingDirectory(tmp_path: Path, capsys) -> None:
     code = cli.main(["--status", "--out", str(tmp_path / "missing")])
     assert code == 1
     assert "输出目录不存在" in capsys.readouterr().out
 
 
-def test_cli_status_existing_directory(tmp_path: Path, capsys) -> None:
+def testCliStatusExistingDirectory(tmp_path: Path, capsys) -> None:
     out = tmp_path / "status"
     out.mkdir()
-    append_entry(out, make_item(appid=1, creator=1, time_recommended=10))
-    save_state(out, {"next_start": 1, "total_count": 4})
+    appendEntry(out, makeItem(appid=1, creator=1, timeRecommended=10))
+    saveState(out, {"next_start": 1, "total_count": 4})
     code = cli.main(["--status", "--out", str(out)])
     assert code == 0
     assert "25.0%" in capsys.readouterr().out
 
 
-def test_cli_bad_config_path(tmp_path: Path, capsys) -> None:
+def testCliBadConfigPath(tmp_path: Path, capsys) -> None:
     code = cli.main(["--config", str(tmp_path / "nope.toml")])
     assert code == 2
     assert "读取配置文件失败" in capsys.readouterr().err
 
 
-def test_cli_invalid_format(tmp_path: Path, capsys) -> None:
+def testCliInvalidFormat(tmp_path: Path, capsys) -> None:
     code = cli.main(
         [
             "--source",
@@ -91,19 +91,19 @@ def test_cli_invalid_format(tmp_path: Path, capsys) -> None:
     assert "无效导出格式" in capsys.readouterr().err
 
 
-def test_cli_dry_run_from_config_file(tmp_path: Path) -> None:
-    config_path = tmp_path / "config.toml"
-    config_path.write_text(
+def testCliDryRunFromConfigFile(tmp_path: Path) -> None:
+    configPath = tmp_path / "config.toml"
+    configPath.write_text(
         'clan_id = "26214428"\nname = "测试组"\nsource = "public"\nformats = ["json"]\n',
         encoding="utf-8",
     )
     code = cli.main(
-        ["--config", str(config_path), "--out", str(tmp_path / "cfg"), "--dry-run"]
+        ["--config", str(configPath), "--out", str(tmp_path / "cfg"), "--dry-run"]
     )
     assert code == 0
 
 
-def test_cli_auth_error_maps_to_exit_three(
+def testCliAuthErrorMapsToExitThree(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class HtmlTransport:
@@ -111,7 +111,7 @@ def test_cli_auth_error_maps_to_exit_three(
             self.kwargs = kwargs
 
         def request(self, *args: Any, **kwargs: Any) -> Any:
-            return html_response("<html>login</html>")
+            return htmlResponse("<html>login</html>")
 
         def close(self) -> None:
             return None
@@ -120,7 +120,7 @@ def test_cli_auth_error_maps_to_exit_three(
     code = cli.main(
         [
             "--url",
-            EXPLICIT_ADMIN_URL,
+            explicitAdminUrl,
             "--cookie",
             "sessionid=0123456789abcdef01234567",
             "--sessionid",
@@ -134,12 +134,12 @@ def test_cli_auth_error_maps_to_exit_three(
     assert code == 3
 
 
-def test_cli_end_to_end_with_fake_transport(
+def testCliEndToEndWithFakeTransport(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     transport = FakeTransport(
-        handler=lambda index, call: admin_response(
-            [make_item(appid=1234, creator=1, time_recommended=100)], 1, 0
+        handler=lambda index, call: adminResponse(
+            [makeItem(appid=1234, creator=1, timeRecommended=100)], 1, 0
         )
     )
 
@@ -151,7 +151,7 @@ def test_cli_end_to_end_with_fake_transport(
     code = cli.main(
         [
             "--url",
-            EXPLICIT_ADMIN_URL,
+            explicitAdminUrl,
             "--cookie",
             "sessionid=0123456789abcdef01234567",
             "--sessionid",
@@ -172,20 +172,20 @@ def test_cli_end_to_end_with_fake_transport(
     assert (out / "reviews.csv").read_bytes().startswith(b"\xef\xbb\xbf")
 
 
-def test_cli_delete_requires_har(tmp_path: Path, capsys) -> None:
+def testCliDeleteRequiresHar(tmp_path: Path, capsys) -> None:
     code = cli.main(["--delete", "--clan-id", "26214428", "--out", str(tmp_path / "d")])
     assert code == 2
     assert "--har" in capsys.readouterr().err
 
 
-def test_cli_delete_file_dry_run(tmp_path: Path, capsys) -> None:
+def testCliDeleteFileDryRun(tmp_path: Path, capsys) -> None:
     appids = tmp_path / "appids.txt"
     appids.write_text("111\n# comment\n222\n", encoding="utf-8")
     out = tmp_path / "del"
     code = cli.main(
         [
             "--har",
-            str(ADMIN_HAR),
+            str(adminHar),
             "--delete-file",
             str(appids),
             "--out",
@@ -202,19 +202,19 @@ def test_cli_delete_file_dry_run(tmp_path: Path, capsys) -> None:
     assert log.read_text(encoding="utf-8").count("DRY") == 2
 
 
-def test_cli_check_dry_run(tmp_path: Path, capsys) -> None:
+def testCliCheckDryRun(tmp_path: Path, capsys) -> None:
     code = cli.main(
-        ["--har", str(ADMIN_HAR), "--check", "--dry-run", "--out", str(tmp_path / "chk")]
+        ["--har", str(adminHar), "--check", "--dry-run", "--out", str(tmp_path / "chk")]
     )
     assert code == 0
     assert "[DRY] --check" in capsys.readouterr().out
 
 
-def test_cli_delete_rejects_public_source(tmp_path: Path, capsys) -> None:
+def testCliDeleteRejectsPublicSource(tmp_path: Path, capsys) -> None:
     code = cli.main(
         [
             "--har",
-            str(ADMIN_HAR),
+            str(adminHar),
             "--delete",
             "--source",
             "public",
@@ -226,7 +226,7 @@ def test_cli_delete_rejects_public_source(tmp_path: Path, capsys) -> None:
     assert "admin" in capsys.readouterr().err
 
 
-def _write_delete_har(tmp_path: Path) -> Path:
+def _writeDeleteHar(tmp_path: Path) -> Path:
     har = {
         "log": {
             "entries": [
@@ -245,10 +245,10 @@ def _write_delete_har(tmp_path: Path) -> Path:
     return path
 
 
-def test_cli_export_derives_recommendations_url_from_delete_har(
+def testCliExportDerivesRecommendationsUrlFromDeleteHar(
     tmp_path: Path, capsys
 ) -> None:
-    path = _write_delete_har(tmp_path)
+    path = _writeDeleteHar(tmp_path)
     code = cli.main(
         ["--har", str(path), "--out", str(tmp_path / "exp"), "--dry-run"]
     )
@@ -257,10 +257,10 @@ def test_cli_export_derives_recommendations_url_from_delete_har(
     assert "/admin/ajaxgetrecommendations/" in printed
 
 
-def test_cli_export_rejects_delete_only_har_for_public_source(
+def testCliExportRejectsDeleteOnlyHarForPublicSource(
     tmp_path: Path, capsys
 ) -> None:
-    path = _write_delete_har(tmp_path)
+    path = _writeDeleteHar(tmp_path)
     code = cli.main(
         [
             "--har",
@@ -276,7 +276,7 @@ def test_cli_export_rejects_delete_only_har_for_public_source(
     assert "ajaxdeletereview" in capsys.readouterr().err
 
 
-def test_cli_delete_accepts_delete_only_har(tmp_path: Path, capsys) -> None:
+def testCliDeleteAcceptsDeleteOnlyHar(tmp_path: Path, capsys) -> None:
     har = {
         "log": {
             "entries": [
@@ -310,3 +310,53 @@ def test_cli_delete_accepts_delete_only_har(tmp_path: Path, capsys) -> None:
     printed = capsys.readouterr().out
     assert "/admin/ajaxdeletereview/" in printed
     assert "[DRY] 555" in printed
+
+
+def testParserExposesCamelCaseDestinations() -> None:
+    args = cli.buildParser().parse_args(
+        [
+            "--har",
+            "capture.har",
+            "--clan-id",
+            "1",
+            "--cookie-file",
+            "cookie.txt",
+            "--proxy-file",
+            "proxies.txt",
+            "--max-pages",
+            "3",
+            "--keep-raw",
+            "--dry-run",
+            "--delete-file",
+            "appids.txt",
+            "--delete-log",
+            "deleted.log",
+            "--log-level",
+            "DEBUG",
+        ]
+    )
+    assert args.clanId == "1"
+    assert args.cookieFile == "cookie.txt"
+    assert args.proxyFile == "proxies.txt"
+    assert args.maxPages == 3
+    assert args.keepRaw is True
+    assert args.dryRun is True
+    assert args.deleteFile == "appids.txt"
+    assert args.deleteLog == "deleted.log"
+    assert args.logLevel == "DEBUG"
+
+
+def testCliRejectsDeleteAndDeleteFileTogether(tmp_path: Path, capsys) -> None:
+    code = cli.main(
+        [
+            "--har",
+            str(adminHar),
+            "--delete",
+            "--delete-file",
+            str(tmp_path / "appids.txt"),
+            "--out",
+            str(tmp_path / "both"),
+        ]
+    )
+    assert code == 2
+    assert "--delete" in capsys.readouterr().err

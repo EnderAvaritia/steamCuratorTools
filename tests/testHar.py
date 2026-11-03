@@ -5,13 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from conftest import ADMIN_HAR, PUBLIC_HAR
-from steam_curator_exporter.errors import ConfigError
-from steam_curator_exporter.har import ENDPOINT_DELETE, load_har
+from conftest import adminHar, publicHar
+from steamCuratorTools.errors import ConfigError
+from steamCuratorTools.har import endpointDelete, loadHar
 
 
-def test_admin_entry_preferred_and_sessionid_from_post_data() -> None:
-    info = load_har(ADMIN_HAR)
+def testAdminEntryPreferredAndSessionidFromPostData() -> None:
+    info = loadHar(adminHar)
     assert info.url is not None
     assert "/admin/ajaxgetrecommendations/" in info.url
     assert info.sessionid == "bbbbbbbbbbbbbbbbbbbbbbbb"
@@ -19,14 +19,14 @@ def test_admin_entry_preferred_and_sessionid_from_post_data() -> None:
     assert (info.referer or "").endswith("/admin/reviews_manage")
 
 
-def test_public_entry_and_sessionid_from_cookie() -> None:
-    info = load_har(PUBLIC_HAR, "public")
+def testPublicEntryAndSessionidFromCookie() -> None:
+    info = loadHar(publicHar, "public")
     assert info.url is not None
     assert "ajaxgetfilteredrecommendations" in info.url
     assert info.sessionid == "cccccccccccccccccccccccc"
 
 
-def test_sessionid_from_urlencoded_text(tmp_path: Path) -> None:
+def testSessionidFromUrlencodedText(tmp_path: Path) -> None:
     har = {
         "log": {
             "entries": [
@@ -45,10 +45,10 @@ def test_sessionid_from_urlencoded_text(tmp_path: Path) -> None:
     }
     path = tmp_path / "text.har"
     path.write_text(json.dumps(har), encoding="utf-8")
-    assert load_har(path).sessionid == "feedface"
+    assert loadHar(path).sessionid == "feedface"
 
 
-def test_gzip_flagged_entry_is_tolerated(tmp_path: Path) -> None:
+def testGzipFlaggedEntryIsTolerated(tmp_path: Path) -> None:
     har = {
         "log": {
             "entries": [
@@ -64,24 +64,24 @@ def test_gzip_flagged_entry_is_tolerated(tmp_path: Path) -> None:
     }
     path = tmp_path / "gzip.har"
     path.write_text(json.dumps(har), encoding="utf-8")
-    assert load_har(path).sessionid == "abcd"
+    assert loadHar(path).sessionid == "abcd"
 
 
-def test_missing_endpoint_raises_config_error(tmp_path: Path) -> None:
+def testMissingEndpointRaisesConfigError(tmp_path: Path) -> None:
     path = tmp_path / "empty.har"
     path.write_text(json.dumps({"log": {"entries": []}}), encoding="utf-8")
     with pytest.raises(ConfigError, match="HAR"):
-        load_har(path)
+        loadHar(path)
 
 
-def test_invalid_json_raises_config_error(tmp_path: Path) -> None:
+def testInvalidJsonRaisesConfigError(tmp_path: Path) -> None:
     path = tmp_path / "bad.har"
     path.write_text("{not json", encoding="utf-8")
     with pytest.raises(ConfigError, match="读取 HAR 失败"):
-        load_har(path)
+        loadHar(path)
 
 
-def _write_delete_har(tmp_path: Path) -> Path:
+def _writeDeleteHar(tmp_path: Path) -> Path:
     har = {
         "log": {
             "entries": [
@@ -107,8 +107,8 @@ def _write_delete_har(tmp_path: Path) -> Path:
     return path
 
 
-def test_delete_har_is_usable_for_delete_endpoint(tmp_path: Path) -> None:
-    info = load_har(_write_delete_har(tmp_path), endpoint=ENDPOINT_DELETE)
+def testDeleteHarIsUsableForDeleteEndpoint(tmp_path: Path) -> None:
+    info = loadHar(_writeDeleteHar(tmp_path), endpoint=endpointDelete)
     assert info.url is not None
     assert "/admin/ajaxdeletereview/" in info.url
     assert info.sessionid == "abcd"
@@ -116,7 +116,7 @@ def test_delete_har_is_usable_for_delete_endpoint(tmp_path: Path) -> None:
     assert info.referer == "https://store.steampowered.com/r"
 
 
-def test_delete_only_har_falls_back_for_credentials(tmp_path: Path) -> None:
-    info = load_har(_write_delete_har(tmp_path))
+def testDeleteOnlyHarFallsBackForCredentials(tmp_path: Path) -> None:
+    info = loadHar(_writeDeleteHar(tmp_path))
     assert "/admin/ajaxdeletereview/" in (info.url or "")
     assert info.sessionid == "abcd"

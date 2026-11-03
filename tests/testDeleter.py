@@ -4,20 +4,20 @@ from pathlib import Path
 
 import pytest
 
-import steam_curator_exporter.deleter as deleter
-from conftest import FakeResponse, FakeTransport, json_response, make_config
-from steam_curator_exporter.deleter import (
+import steamCuratorTools.deleter as deleter
+from conftest import FakeResponse, FakeTransport, jsonResponse, makeConfig
+from steamCuratorTools.deleter import (
     DeleteResult,
-    append_log,
-    delete_one,
-    load_done,
-    parse_appid_line,
-    run_check,
-    run_delete,
+    appendLog,
+    deleteOne,
+    loadDone,
+    parseAppidLine,
+    runCheck,
+    runDelete,
 )
-from steam_curator_exporter.errors import AuthError
+from steamCuratorTools.errors import AuthError
 
-DELETE_URL = (
+deleteUrl = (
     "https://store.steampowered.com/curator/26214428-TEST/admin/ajaxdeletereview/"
 )
 
@@ -41,29 +41,29 @@ DELETE_URL = (
         ("12345678901", True, ("error", "无法识别的 appid: 12345678901")),
     ],
 )
-def test_parse_appid_line(
+def testParseAppidLine(
     line: str,
     interactive: bool,
     expected: tuple[str, str],
 ) -> None:
-    assert parse_appid_line(line, interactive=interactive) == expected
+    assert parseAppidLine(line, interactive=interactive) == expected
 
 
-def test_log_roundtrip_and_done_filter(tmp_path: Path) -> None:
+def testLogRoundtripAndDoneFilter(tmp_path: Path) -> None:
     log = tmp_path / "deleted.log"
-    assert load_done(log) == set()
-    append_log(log, "111", "OK", '{"success":1}')
-    append_log(log, "222", "FAIL", "status=500")
-    append_log(log, "333", "DRY", "dry-run")
-    assert load_done(log) == {"111"}
+    assert loadDone(log) == set()
+    appendLog(log, "111", "OK", '{"success":1}')
+    appendLog(log, "222", "FAIL", "status=500")
+    appendLog(log, "333", "DRY", "dry-run")
+    assert loadDone(log) == {"111"}
     assert "111\tOK" in log.read_text(encoding="utf-8")
 
 
-def test_delete_one_success(logger) -> None:
-    transport = FakeTransport(responses=[json_response({"success": 1, "clanid": 1})])
-    result = delete_one(
+def testDeleteOneSuccess(logger) -> None:
+    transport = FakeTransport(responses=[jsonResponse({"success": 1, "clanid": 1})])
+    result = deleteOne(
         transport,
-        url=DELETE_URL,
+        url=deleteUrl,
         sessionid="deadbeef",
         cookie="sessionid=deadbeef",
         referer="https://store.steampowered.com/curator/1/admin/reviews_manage",
@@ -79,11 +79,11 @@ def test_delete_one_success(logger) -> None:
     assert call["headers"]["X-Requested-With"] == "XMLHttpRequest"
 
 
-def test_delete_one_does_not_retry_json_error(logger) -> None:
-    transport = FakeTransport(responses=[json_response({"success": 42}, status=500)])
-    result = delete_one(
+def testDeleteOneDoesNotRetryJsonError(logger) -> None:
+    transport = FakeTransport(responses=[jsonResponse({"success": 42}, status=500)])
+    result = deleteOne(
         transport,
-        url=DELETE_URL,
+        url=deleteUrl,
         sessionid="s",
         cookie="c",
         referer="r",
@@ -92,22 +92,22 @@ def test_delete_one_does_not_retry_json_error(logger) -> None:
         logger=logger,
     )
     assert result.status == "FAIL"
-    assert result.http_status == "500"
+    assert result.httpStatus == "500"
     assert "'success':42" in result.detail.replace('"', "'")
     assert len(transport.calls) == 1
 
 
-def test_delete_one_retries_transient_5xx(logger, monkeypatch) -> None:
+def testDeleteOneRetriesTransient5xx(logger, monkeypatch) -> None:
     monkeypatch.setattr(deleter.time, "sleep", lambda _seconds: None)
     transport = FakeTransport(
         responses=[
             FakeResponse(status_code=500, text="upstream error"),
-            json_response({"success": 1}),
+            jsonResponse({"success": 1}),
         ]
     )
-    result = delete_one(
+    result = deleteOne(
         transport,
-        url=DELETE_URL,
+        url=deleteUrl,
         sessionid="s",
         cookie="c",
         referer="r",
@@ -120,12 +120,12 @@ def test_delete_one_retries_transient_5xx(logger, monkeypatch) -> None:
     assert len(transport.calls) == 2
 
 
-def test_delete_one_auth_error_propagates(logger) -> None:
+def testDeleteOneAuthErrorPropagates(logger) -> None:
     transport = FakeTransport(handler=lambda index, call: AuthError("expired"))
     with pytest.raises(AuthError, match="expired"):
-        delete_one(
+        deleteOne(
             transport,
-            url=DELETE_URL,
+            url=deleteUrl,
             sessionid="s",
             cookie="c",
             referer="r",
@@ -135,16 +135,16 @@ def test_delete_one_auth_error_propagates(logger) -> None:
         )
 
 
-def test_run_delete_dry_run_never_calls_transport(tmp_path: Path, capsys, logger) -> None:
-    config = make_config(tmp_path)
+def testRunDeleteDryRunNeverCallsTransport(tmp_path: Path, capsys, logger) -> None:
+    config = makeConfig(tmp_path)
     log = tmp_path / "deleted.log"
-    code = run_delete(
+    code = runDelete(
         config,
-        delete_url=DELETE_URL,
-        log_path=log,
+        deleteUrl=deleteUrl,
+        logPath=log,
         lines=["111", "# skip", "", "bad line", "222"],
         interactive=True,
-        dry_run=True,
+        dryRun=True,
         force=False,
         logger=logger,
         transport=None,
@@ -158,18 +158,18 @@ def test_run_delete_dry_run_never_calls_transport(tmp_path: Path, capsys, logger
     assert log.read_text(encoding="utf-8").count("DRY") == 2
 
 
-def test_run_delete_skips_logged_appids(tmp_path: Path, capsys, logger) -> None:
-    config = make_config(tmp_path)
+def testRunDeleteSkipsLoggedAppids(tmp_path: Path, capsys, logger) -> None:
+    config = makeConfig(tmp_path)
     log = tmp_path / "deleted.log"
-    append_log(log, "111", "OK", "done")
+    appendLog(log, "111", "OK", "done")
     transport = FakeTransport(responses=[])
-    code = run_delete(
+    code = runDelete(
         config,
-        delete_url=DELETE_URL,
-        log_path=log,
+        deleteUrl=deleteUrl,
+        logPath=log,
         lines=["111"],
         interactive=False,
-        dry_run=False,
+        dryRun=False,
         force=False,
         logger=logger,
         transport=transport,
@@ -179,22 +179,22 @@ def test_run_delete_skips_logged_appids(tmp_path: Path, capsys, logger) -> None:
     assert transport.calls == []
 
 
-def test_run_delete_success_and_failure(tmp_path: Path, capsys, logger) -> None:
-    config = make_config(tmp_path)
+def testRunDeleteSuccessAndFailure(tmp_path: Path, capsys, logger) -> None:
+    config = makeConfig(tmp_path)
     log = tmp_path / "deleted.log"
     transport = FakeTransport(
         responses=[
-            json_response({"success": 1, "clanid": 1}),
-            json_response({"success": 42}, status=500),
+            jsonResponse({"success": 1, "clanid": 1}),
+            jsonResponse({"success": 42}, status=500),
         ]
     )
-    code = run_delete(
+    code = runDelete(
         config,
-        delete_url=DELETE_URL,
-        log_path=log,
+        deleteUrl=deleteUrl,
+        logPath=log,
         lines=["111", "222"],
         interactive=False,
-        dry_run=False,
+        dryRun=False,
         force=False,
         logger=logger,
         transport=transport,
@@ -204,21 +204,21 @@ def test_run_delete_success_and_failure(tmp_path: Path, capsys, logger) -> None:
     assert "[OK] 111" in printed
     assert "[FAIL] 222 status=500" in printed
     assert [call["data"]["appid"] for call in transport.calls] == ["111", "222"]
-    assert load_done(log) == {"111"}
+    assert loadDone(log) == {"111"}
 
 
-def test_run_delete_force_ignores_log(tmp_path: Path, logger) -> None:
-    config = make_config(tmp_path)
+def testRunDeleteForceIgnoresLog(tmp_path: Path, logger) -> None:
+    config = makeConfig(tmp_path)
     log = tmp_path / "deleted.log"
-    append_log(log, "111", "OK", "done")
-    transport = FakeTransport(responses=[json_response({"success": 1})])
-    code = run_delete(
+    appendLog(log, "111", "OK", "done")
+    transport = FakeTransport(responses=[jsonResponse({"success": 1})])
+    code = runDelete(
         config,
-        delete_url=DELETE_URL,
-        log_path=log,
+        deleteUrl=deleteUrl,
+        logPath=log,
         lines=["111"],
         interactive=False,
-        dry_run=False,
+        dryRun=False,
         force=True,
         logger=logger,
         transport=transport,
@@ -227,18 +227,18 @@ def test_run_delete_force_ignores_log(tmp_path: Path, logger) -> None:
     assert len(transport.calls) == 1
 
 
-def test_run_check_success(tmp_path: Path, capsys, logger) -> None:
-    config = make_config(tmp_path)
+def testRunCheckSuccess(tmp_path: Path, capsys, logger) -> None:
+    config = makeConfig(tmp_path)
     transport = FakeTransport(
-        responses=[json_response({"success": 1, "recommendations": [{"appid": 1}]})]
+        responses=[jsonResponse({"success": 1, "recommendations": [{"appid": 1}]})]
     )
-    code = run_check(config, url=DELETE_URL, logger=logger, transport=transport)
+    code = runCheck(config, url=deleteUrl, logger=logger, transport=transport)
     assert code == 0
     assert "检查成功" in capsys.readouterr().out
 
 
-def test_run_check_rejects_non_success_payload(tmp_path: Path, logger) -> None:
-    config = make_config(tmp_path)
-    transport = FakeTransport(responses=[json_response({"success": 0})])
+def testRunCheckRejectsNonSuccessPayload(tmp_path: Path, logger) -> None:
+    config = makeConfig(tmp_path)
+    transport = FakeTransport(responses=[jsonResponse({"success": 0})])
     with pytest.raises(AuthError, match="success != 1"):
-        run_check(config, url=DELETE_URL, logger=logger, transport=transport)
+        runCheck(config, url=deleteUrl, logger=logger, transport=transport)
